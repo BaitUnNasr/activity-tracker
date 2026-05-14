@@ -1,8 +1,8 @@
 import { Geist, Geist_Mono, Noto_Sans, Inter } from "next/font/google"
 
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/src/components/theme-provider"
+import { cn } from "@/src/lib/utils";
 
 const interHeading = Inter({subsets:['latin'],variable:'--font-heading'});
 
