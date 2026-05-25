@@ -1,18 +1,12 @@
-import { Geist, Geist_Mono, Noto_Sans, Inter } from "next/font/google"
+import { Google_Sans } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/src/components/theme-provider";
+import { TooltipProvider } from "@/src/components/ui/tooltip"
 import { QueryProvider } from "@/src/components/query-provider";
 import { cn } from "@/src/lib/utils";
 
-const interHeading = Inter({subsets:['latin'],variable:'--font-heading'});
-
-const notoSans = Noto_Sans({subsets:['latin'],variable:'--font-sans'})
-
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-})
+const googleSans = Google_Sans({ subsets: ['latin'], variable: '--font-sans' });
 
 export default function RootLayout({
   children,
@@ -23,11 +17,13 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", notoSans.variable, interHeading.variable)}
+      className={cn("antialiased", googleSans.variable, "font-sans")}
     >
       <body>
         <ThemeProvider>
-          <QueryProvider>{children}</QueryProvider>
+          <TooltipProvider>
+            <QueryProvider>{children}</QueryProvider>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

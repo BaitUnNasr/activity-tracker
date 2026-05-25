@@ -9,13 +9,12 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="mb-8 flex items-center gap-2">
           <div className="flex size-9 items-center justify-center rounded-full bg-brand">
-            <ActivitySquare className="size-5 text-gray-900 dark:text-[#C9F036]" />
+            <ActivitySquare className="size-5 text-gray-900 dark:text-white" />
           </div>
           <span className="text-xl font-bold tracking-tight text-card-foreground">
             Pulse
           </span>
         </div>
-
         <LoginForm />
       </div>
     </div>
