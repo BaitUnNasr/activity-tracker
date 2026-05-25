@@ -5,6 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+    --brand: #C9F036;
     --background: oklch(1 0 0);
     --foreground: oklch(0.153 0.006 107.1);
     --card: oklch(1 0 0);
@@ -106,6 +107,7 @@
     --color-card-foreground: var(--card-foreground);
     --color-card: var(--card);
     --color-foreground: var(--foreground);
+    --color-brand: var(--brand);
     --color-background: var(--background);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
