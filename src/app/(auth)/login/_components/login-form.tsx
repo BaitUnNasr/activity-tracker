@@ -1,16 +1,65 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { ArrowRight, Lock, Mail } from "lucide-react"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Lock, Mail, Loader2 } from "lucide-react";
 
-import { cn } from "@/src/lib/utils"
+import { cn } from "@/src/lib/utils";
+import { AlertDestructive } from "@/src/components/alerts/alertDestructive";
+
+type LoginType = {
+  email: string;
+  password: string;
+};
 
 export function LoginForm({ className }: { className?: string }) {
-  const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  const router = useRouter();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginType>();
+
+  const loginMutation = useMutation({
+    mutationFn: async (data: LoginType) => {
+      const res = await fetch("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, rememberMe }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw json;
+      return json;
+    },
+    onSuccess: () => {
+      setIsRedirecting(true);
+      router.push("/dashboard");
+    },
+    onError: (err: { message?: string }) => {
+      setFormError(err.message ?? "Something went wrong");
+    },
+  });
+
+  const isLoading = loginMutation.isPending || isRedirecting;
+
+  const onSubmit = (data: LoginType) => {
+    setFormError(null);
+    loginMutation.mutate(data);
+  };
 
   return (
-    <form className={cn("flex flex-col gap-5", className)}>
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
+      className={cn("flex flex-col gap-5", className)}
+    >
       {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -20,6 +69,8 @@ export function LoginForm({ className }: { className?: string }) {
           Sign in to your workspace to view today&apos;s activity.
         </p>
       </div>
+
+      {formError && <AlertDestructive title={formError} />}
 
       {/* Fields */}
       <div className="mt-1 flex flex-col gap-3">
@@ -37,10 +88,23 @@ export function LoginForm({ className }: { className?: string }) {
               id="email"
               type="email"
               placeholder="you@company.com"
-              required
-              className="h-12 w-full rounded-xl border-0 bg-muted pl-10 pr-4 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-brand focus:ring-offset-0"
+              disabled={isLoading}
+              className={cn(
+                "h-12 w-full rounded-xl border-0 bg-muted pl-10 pr-4 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-brand focus:ring-offset-0 disabled:opacity-50",
+                errors.email && "ring-2 ring-destructive",
+              )}
+              {...register("email", {
+                required: "Email address is required",
+                pattern: {
+                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                  message: "Enter a valid email address",
+                },
+              })}
             />
           </div>
+          {errors.email && (
+            <p className="text-xs text-destructive">{errors.email.message}</p>
+          )}
         </div>
 
         {/* Password */}
@@ -64,8 +128,14 @@ export function LoginForm({ className }: { className?: string }) {
             <input
               id="password"
               type={showPassword ? "text" : "password"}
-              required
-              className="h-12 w-full rounded-xl border-0 bg-muted pl-10 pr-14 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
+              disabled={isLoading}
+              className={cn(
+                "h-12 w-full rounded-xl border-0 bg-muted pl-10 pr-14 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0 disabled:opacity-50",
+                errors.password && "ring-2 ring-destructive",
+              )}
+              {...register("password", {
+                required: "Password is required",
+              })}
             />
             <button
               type="button"
@@ -75,6 +145,9 @@ export function LoginForm({ className }: { className?: string }) {
               {showPassword ? "Hide" : "Show"}
             </button>
           </div>
+          {errors.password && (
+            <p className="text-xs text-destructive">{errors.password.message}</p>
+          )}
         </div>
 
         {/* Remember me */}
@@ -90,7 +163,7 @@ export function LoginForm({ className }: { className?: string }) {
               "flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all",
               rememberMe
                 ? "border-brand bg-brand"
-                : "border-border bg-background"
+                : "border-border bg-background",
             )}
           >
             {rememberMe && (
@@ -106,11 +179,16 @@ export function LoginForm({ className }: { className?: string }) {
       {/* Submit */}
       <button
         type="submit"
-        className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.98]"
+        disabled={isLoading}
+        className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground text-sm font-semibold text-background transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
       >
-        Sign in to dashboard
-        <ArrowRight className="size-4" />
+        {isRedirecting ? "Preparing dashboard…" : isLoading ? "Signing in…" : "Sign in to dashboard"}
+        {isLoading ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <ArrowRight className="size-4" />
+        )}
       </button>
     </form>
-  )
+  );
 }

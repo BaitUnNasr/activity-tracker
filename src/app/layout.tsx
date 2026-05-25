@@ -1,7 +1,8 @@
 import { Geist, Geist_Mono, Noto_Sans, Inter } from "next/font/google"
 
 import "./globals.css"
-import { ThemeProvider } from "@/src/components/theme-provider"
+import { ThemeProvider } from "@/src/components/theme-provider";
+import { QueryProvider } from "@/src/components/query-provider";
 import { cn } from "@/src/lib/utils";
 
 const interHeading = Inter({subsets:['latin'],variable:'--font-heading'});
@@ -25,7 +26,9 @@ export default function RootLayout({
       className={cn("antialiased", fontMono.variable, "font-sans", notoSans.variable, interHeading.variable)}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
