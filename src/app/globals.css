@@ -41,6 +41,7 @@
 }
 
 .dark {
+    --brand: #233b09;
     --background: oklch(0.153 0.006 107.1);
     --foreground: oklch(0.988 0.003 106.5);
     --card: oklch(0.228 0.013 107.4);
@@ -108,6 +109,7 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-brand: var(--brand);
+    --color-login-page-bg: var(--login-page-bg);
     --color-background: var(--background);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
