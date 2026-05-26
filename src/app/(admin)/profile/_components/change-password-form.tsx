@@ -2,10 +2,18 @@
 
 import { useState } from "react";
 import { Check, Eye, EyeOff, Lock } from "lucide-react";
-
 import { toast } from "sonner";
 
 import { authClient } from "@/src/lib/auth-client";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/src/components/ui/card";
 
 function PasswordInput({
   label,
@@ -69,7 +77,6 @@ export function ChangePasswordForm() {
     if (!allValid) return;
     setLoading(true);
     setError(null);
-    // setSuccess(false);
 
     const { error: err } = await authClient.changePassword({
       currentPassword: current,
@@ -87,63 +94,67 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-3xl border border-border p-6 bg-card">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h3 className="text-lg font-semibold text-card-foreground">Change Password</h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Use a strong password you don&apos;t reuse elsewhere.
-          </p>
-        </div>
-        <div className="h-10 w-10 rounded-full grid place-items-center bg-brand">
-          <Lock className="h-4 w-4 text-gray-900" />
-        </div>
-      </div>
+    <Card>
+      <form onSubmit={handleSubmit} className="contents">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Change Password</CardTitle>
+          <CardDescription>Use a strong password you don&apos;t reuse elsewhere.</CardDescription>
+          <CardAction>
+            <div className="h-10 w-10 rounded-full grid place-items-center bg-brand">
+              <Lock className="h-4 w-4 text-gray-900" />
+            </div>
+          </CardAction>
+        </CardHeader>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="sm:col-span-2">
-          <PasswordInput label="Current Password" value={current} onChange={setCurrent} />
-        </div>
-        <PasswordInput label="New Password" value={next} onChange={setNext} />
-        <PasswordInput label="Confirm New Password" value={confirm} onChange={setConfirm} />
-      </div>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <PasswordInput label="Current Password" value={current} onChange={setCurrent} />
+            </div>
+            <PasswordInput label="New Password" value={next} onChange={setNext} />
+            <PasswordInput label="Confirm New Password" value={confirm} onChange={setConfirm} />
+          </div>
 
-      <div className="mt-5 rounded-2xl bg-muted p-4">
-        <p className="text-xs font-semibold text-foreground mb-3">Password requirements</p>
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {rules.map((r) => (
-            <li key={r.label} className="flex items-center gap-2 text-xs">
-              <span
-                className={`h-4 w-4 rounded-full grid place-items-center shrink-0 transition-colors ${
-                  r.ok ? "bg-brand" : "bg-border"
-                }`}
-              >
-                <Check className="h-3 w-3 text-gray-900" />
-              </span>
-              <span className={r.ok ? "text-foreground" : "text-muted-foreground"}>{r.label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+          <div className="rounded-2xl bg-muted p-4">
+            <p className="text-xs font-semibold text-foreground mb-3">Password requirements</p>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {rules.map((r) => (
+                <li key={r.label} className="flex items-center gap-2 text-xs">
+                  <span
+                    className={`h-4 w-4 rounded-full grid place-items-center shrink-0 transition-colors ${
+                      r.ok ? "bg-brand" : "bg-border"
+                    }`}
+                  >
+                    <Check className="h-3 w-3 text-gray-900" />
+                  </span>
+                  <span className={r.ok ? "text-foreground" : "text-muted-foreground"}>
+                    {r.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </CardContent>
 
-      <div className="mt-5 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={reset}
-          className="px-4 py-2.5 rounded-full text-sm border border-border hover:bg-muted transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={!allValid || loading}
-          className="px-5 py-2.5 rounded-full text-sm font-medium bg-brand text-gray-900 disabled:opacity-50 transition-opacity"
-        >
-          {loading ? "Updating…" : "Update Password"}
-        </button>
-      </div>
-    </form>
+        <CardFooter className="justify-end gap-2">
+          <button
+            type="button"
+            onClick={reset}
+            className="px-4 py-2.5 rounded-full text-sm border border-border hover:bg-muted transition-colors"
+          >
+            Reset
+          </button>
+          <button
+            type="submit"
+            disabled={!allValid || loading}
+            className="px-5 py-2.5 rounded-full text-sm font-medium bg-brand text-gray-900 disabled:opacity-50 transition-opacity"
+          >
+            {loading ? "Updating…" : "Update Password"}
+          </button>
+        </CardFooter>
+      </form>
+    </Card>
   );
 }

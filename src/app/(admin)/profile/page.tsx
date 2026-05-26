@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { BadgeCheck, Briefcase, Building2, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 
 import { db } from "@/src/db/client";
 import { user as userTable } from "@/src/db/schema";
@@ -65,14 +66,14 @@ function ProfileCard({
   const initials = user?.name ? getInitials(user.name) : "?";
 
   return (
-    <div className="rounded-3xl border border-border p-6 flex flex-col items-center text-center bg-card">
+    <Card className="items-center text-center gap-1">
       <Avatar className="h-28 w-28">
         <AvatarFallback className="bg-brand text-gray-900 text-3xl font-bold">
           {initials}
         </AvatarFallback>
       </Avatar>
 
-      <h2 className="mt-4 text-xl font-semibold text-card-foreground">{user?.name ?? "—"}</h2>
+      <h2 className="text-xl font-semibold text-card-foreground">{user?.name ?? "—"}</h2>
       <p className="text-sm text-muted-foreground">{user?.designation ?? "—"}</p>
 
       <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-brand text-foreground">
@@ -81,11 +82,11 @@ function ProfileCard({
 
       {joinedAt && (
         <div className="mt-4 w-full pt-4 border-t border-dashed border-border flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Joined</span>
-          <span className="font-semibold text-foreground">{formatJoined(joinedAt)}</span>
+          <span className="text-muted-foreground ms-5">Joined</span>
+          <span className="font-semibold text-foreground me-5">{formatJoined(joinedAt)}</span>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -115,14 +116,19 @@ function PersonalInfo({ user }: { user: SessionUser | null }) {
   const typeLabel = user?.type === "F" ? "Full-time" : user?.type === "T" ? "Trainee" : "—";
 
   return (
-    <div className="rounded-3xl border border-border p-6 bg-card">
-      <h3 className="text-lg font-semibold text-card-foreground mb-2">Personal Information</h3>
-      <div className="divide-y divide-border">
-        <DetailRow icon={User} label="Full Name" value={user?.name ?? "—"} />
-        <DetailRow icon={Briefcase} label="Type" value={typeLabel} />
-        <DetailRow icon={Building2} label="Branch" value={user?.branch ?? "—"} />
-        <DetailRow icon={BadgeCheck} label="Designation" value={user?.designation ?? "—"} />
-      </div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold">Personal Information</CardTitle>
+        <CardDescription>Your account details as registered in the system.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="divide-y divide-border">
+          <DetailRow icon={User} label="Full Name" value={user?.name ?? "—"} />
+          <DetailRow icon={Briefcase} label="Type" value={typeLabel} />
+          <DetailRow icon={Building2} label="Branch" value={user?.branch ?? "—"} />
+          <DetailRow icon={BadgeCheck} label="Designation" value={user?.designation ?? "—"} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
