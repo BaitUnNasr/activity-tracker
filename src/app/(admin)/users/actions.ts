@@ -1,0 +1,186 @@
+"use server";
+
+import { randomUUID } from "crypto";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { hashPassword } from "better-auth/crypto";
+
+import { auth } from "@/src/lib/auth";
+import { db } from "@/src/db/client";
+import {
+  user,
+  account,
+  userDesignationLink,
+  userBranchLink,
+  designationMaster,
+  branchMaster,
+} from "@/src/db/schema";
+import { getSessionUser } from "@/src/lib/session";
+
+const VISIBLE_DESIGNATIONS: Record<string, string[]> = {
+  Admin: [],
+  Chairman: ["Management", "Supervisor", "General"],
+  Management: ["Supervisor", "General"],
+  Supervisor: ["General"],
+};
+
+export type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  employeeCode: string;
+  type: string;
+  isActive: boolean;
+  designation: string | null;
+  branch: string | null;
+};
+
+export type UsersPageData = {
+  users: UserRow[];
+  designations: { id: number; name: string }[];
+  branches: { id: number; name: string }[];
+  isAdmin: boolean;
+};
+
+export async function fetchUsersPageData(): Promise<UsersPageData> {
+  const sessionUser = await getSessionUser(await headers());
+
+  if (!sessionUser || !sessionUser.designation || sessionUser.designation === "General") {
+    redirect("/dashboard");
+  }
+
+  const designation = sessionUser.designation;
+  const isAdmin = designation === "Admin";
+  const visibleDesignations = VISIBLE_DESIGNATIONS[designation] ?? [];
+
+  if (!isAdmin && visibleDesignations.length === 0) {
+    redirect("/dashboard");
+  }
+
+  const whereClause = isAdmin
+    ? undefined
+    : and(
+        inArray(designationMaster.name, visibleDesignations),
+        eq(branchMaster.name, sessionUser.branch ?? ""),
+      );
+
+  const [users, designations, branches] = await Promise.all([
+    db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        employeeCode: user.employeeCode,
+        type: user.type,
+        isActive: user.isActive,
+        designation: designationMaster.name,
+        branch: branchMaster.name,
+      })
+      .from(user)
+      .leftJoin(
+        userDesignationLink,
+        and(eq(userDesignationLink.userId, user.id), isNull(userDesignationLink.endDate)),
+      )
+      .leftJoin(designationMaster, eq(userDesignationLink.designationId, designationMaster.id))
+      .leftJoin(
+        userBranchLink,
+        and(eq(userBranchLink.userId, user.id), isNull(userBranchLink.endDate)),
+      )
+      .leftJoin(branchMaster, eq(userBranchLink.branchId, branchMaster.id))
+      .where(whereClause),
+
+    db
+      .select({ id: designationMaster.id, name: designationMaster.name })
+      .from(designationMaster)
+      .where(eq(designationMaster.isActive, true)),
+
+    db
+      .select({ id: branchMaster.id, name: branchMaster.name })
+      .from(branchMaster)
+      .where(eq(branchMaster.isActive, true)),
+  ]);
+
+  return { users, designations, branches, isAdmin };
+}
+
+export type CreateUserInput = {
+  name: string;
+  email: string;
+  password: string;
+  employeeCode: string;
+  type: "F" | "T";
+  designationId: number;
+  branchId: number;
+};
+
+export type ActionResult =
+  | { success: true }
+  | { success: false; message: string; field?: string };
+
+export async function createUser(input: CreateUserInput): Promise<ActionResult> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) return { success: false, message: "Unauthorized" };
+
+  const { name, email, password, employeeCode, type, designationId, branchId } = input;
+
+  const existing = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email.toLowerCase()))
+    .limit(1);
+
+  if (existing.length > 0) {
+    return { success: false, message: "Email is already registered", field: "email" };
+  }
+
+  const userId = randomUUID();
+  const today = new Date().toISOString().split("T")[0];
+
+  try {
+    const hashedPassword = await hashPassword(password);
+
+    await db.transaction(async (tx) => {
+      await tx.insert(user).values({
+        id: userId,
+        name,
+        email: email.toLowerCase(),
+        employeeCode,
+        type,
+        emailVerified: false,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await tx.insert(account).values({
+        id: randomUUID(),
+        accountId: userId,
+        providerId: "credential",
+        userId,
+        password: hashedPassword,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await tx.insert(userDesignationLink).values({
+        userId,
+        designationId,
+        startDate: today,
+      });
+
+      await tx.insert(userBranchLink).values({
+        userId,
+        branchId,
+        startDate: today,
+      });
+    });
+
+    revalidatePath("/users");
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Something went wrong";
+    return { success: false, message };
+  }
+}

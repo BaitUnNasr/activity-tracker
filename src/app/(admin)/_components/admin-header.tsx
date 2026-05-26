@@ -59,8 +59,10 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // const user = session?.user;
   const initials = user?.name ? getInitials(user.name) : "?";
+  const visibleNavLinks = navLinks.filter(
+    (link) => !(link.href === "/users" && user?.designation === "General"),
+  );
 
   function handleAvatarClick() {
     if (window.innerWidth < 640) {
@@ -90,7 +92,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
       {/* Desktop nav tabs */}
       <div className="hidden sm:flex justify-center">
         <div className="flex items-center gap-1 rounded-full bg-muted border border-border p-1">
-          {navLinks.map(({ label, href }) => {
+          {visibleNavLinks.map(({ label, href }) => {
             const isActive = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
@@ -275,7 +277,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
             className="flex-col flex-1"
           >
             <SidebarMenu className="p-3">
-              {navLinks.map(({ label, href, icon: Icon }) => {
+              {visibleNavLinks.map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <SidebarMenuItem key={href}>
