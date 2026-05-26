@@ -4,6 +4,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/src/components/theme-provider";
 import { TooltipProvider } from "@/src/components/ui/tooltip"
 import { QueryProvider } from "@/src/components/query-provider";
+import { Toaster } from "@/src/components/ui/sonner";
 import { cn } from "@/src/lib/utils";
 
 const oswald = Oswald({ subsets: ['latin'], variable: '--font-heading' });
@@ -24,6 +25,7 @@ export default function RootLayout({
           <TooltipProvider>
             <QueryProvider>{children}</QueryProvider>
           </TooltipProvider>
+          <Toaster position="bottom-right" richColors />
         </ThemeProvider>
       </body>
     </html>

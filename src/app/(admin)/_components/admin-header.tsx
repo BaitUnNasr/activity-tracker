@@ -35,6 +35,7 @@ import {
   DrawerTitle,
 } from "@/src/components/ui/drawer";
 import type { SessionUser } from "@/src/lib/session";
+import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
 
 const navLinks = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -128,9 +129,13 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
             aria-label="User menu"
             aria-expanded={dropdownOpen}
             aria-haspopup="menu"
-            className="h-9 w-9 rounded-full bg-foreground text-background text-xs font-semibold grid place-items-center ring-2 ring-border shadow hover:opacity-90 transition-opacity"
+            className="rounded-full ring-2 ring-border shadow hover:opacity-90 transition-opacity"
           >
-            {initials}
+            <Avatar className="h-9 w-9">
+              <AvatarFallback className="bg-foreground text-background text-xs font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
           </button>
 
           {dropdownOpen && (
@@ -197,9 +202,11 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DrawerContent>
           <div className="px-4 pb-4 pt-5 border-b border-border flex items-center gap-4">
-            <div className="h-14 w-14 shrink-0 rounded-2xl bg-foreground text-background text-base font-bold grid place-items-center">
-              {initials}
-            </div>
+            <Avatar className="h-14 w-14 shrink-0 rounded-2xl">
+              <AvatarFallback className="bg-foreground text-background text-base font-bold rounded-2xl">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
             <div className="min-w-0">
               <DrawerTitle className="text-base font-bold text-foreground truncate">
                 {user?.name ?? "—"}
