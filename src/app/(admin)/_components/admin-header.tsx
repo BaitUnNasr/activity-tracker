@@ -10,12 +10,12 @@ import {
   LogOut,
   Menu,
   Settings,
-  User,
+  User as UserIcon,
   Users,
 } from "lucide-react";
 
 import { cn } from "@/src/lib/utils";
-import { signOut, useSession } from "@/src/lib/auth-client";
+import { signOut } from "@/src/lib/auth-client";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -34,6 +34,7 @@ import {
   DrawerContent,
   DrawerTitle,
 } from "@/src/components/ui/drawer";
+import type { SessionUser } from "@/src/lib/session";
 
 const navLinks = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -50,15 +51,14 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-export function AdminHeader() {
+export function AdminHeader({ user }: { user: SessionUser | null }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session } = useSession();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const user = session?.user;
+  // const user = session?.user;
   const initials = user?.name ? getInitials(user.name) : "?";
 
   function handleAvatarClick() {
@@ -75,7 +75,7 @@ export function AdminHeader() {
   }
 
   return (
-    <nav className="flex items-center justify-between gap-3" aria-label="Main navigation">
+    <nav className="flex items-center justify-between gap-3 sm:grid sm:grid-cols-[1fr_auto_1fr]" aria-label="Main navigation">
       {/* Logo */}
       <div className="flex items-center gap-2 shrink-0">
         <div className="flex size-9 items-center justify-center rounded-full bg-brand">
@@ -87,7 +87,7 @@ export function AdminHeader() {
       </div>
 
       {/* Desktop nav tabs */}
-      <div className="flex-1 min-w-0 justify-center hidden sm:flex">
+      <div className="hidden sm:flex justify-center">
         <div className="flex items-center gap-1 rounded-full bg-muted border border-border p-1">
           {navLinks.map(({ label, href }) => {
             const isActive = pathname === href || pathname.startsWith(href + "/");
@@ -111,11 +111,7 @@ export function AdminHeader() {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0">
-        <IconButton aria-label="Settings" className="hidden sm:grid">
-          <Settings className="h-4 w-4" />
-        </IconButton>
-
+      <div className="flex items-center gap-2 shrink-0 sm:justify-end">
         {/* Hamburger — mobile only */}
         <IconButton
           aria-label="Open menu"
@@ -165,7 +161,7 @@ export function AdminHeader() {
                   <SidebarMenu className="p-2">
                     <SidebarMenuItem>
                       <SidebarMenuButton onClick={() => { router.push("/profile"); setDropdownOpen(false); }}>
-                        <User />
+                        <UserIcon />
                         <span>Profile</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -221,7 +217,7 @@ export function AdminHeader() {
             <SidebarMenu className="p-2">
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={() => { router.push("/profile"); setDrawerOpen(false); }}>
-                  <User />
+                  <UserIcon />
                   <span>Profile</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

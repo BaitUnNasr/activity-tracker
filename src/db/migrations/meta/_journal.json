@@ -8,6 +8,20 @@
       "when": 1779738523775,
       "tag": "0000_strong_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779823377008,
+      "tag": "0001_fine_madame_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779825806363,
+      "tag": "0002_known_ikaris",
+      "breakpoints": true
     }
   ]
 }

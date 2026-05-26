@@ -1,30 +1,27 @@
 import { relations } from "drizzle-orm";
-import { pgEnum, pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
-import { Roles, type Role } from "@/src/lib/constants";
+import { pgTable, text, timestamp, boolean, index, char, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { userDesignationLink, userBranchLink } from "./masters";
 
-export const roleEnum = pgEnum("role", [
-  Roles.SUPER_ADMIN,
-  Roles.ADMIN,
-  Roles.CHAIRMAN,
-  Roles.SUPERVISOR,
-  Roles.GENERAL,
-]);
-
-export const user = pgTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").default(false).notNull(),
-  image: text("image"),
-  role: roleEnum("role").default(Roles.GENERAL).notNull(),
-  // False = account is suspended / deactivated.
-  isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => /* @__PURE__ */ new Date())
-    .notNull(),
-});
+export const user = pgTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    employeeCode: text("employee_code").notNull(),
+    type: char("type", { length: 1 }).notNull(),
+    emailVerified: boolean("email_verified").default(false).notNull(),
+    image: text("image"),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [check("user_type_check", sql`${table.type} IN ('F', 'T')`)],
+);
 
 export const session = pgTable(
   "session",
@@ -88,6 +85,8 @@ export const verification = pgTable(
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  designationLinks: many(userDesignationLink),
+  branchLinks: many(userBranchLink),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
