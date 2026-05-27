@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ActivitySquare,
+  CalendarDays,
   LayoutDashboard,
   ListTodo,
   LogOut,
@@ -41,6 +42,7 @@ const navLinks = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Users", href: "/users", icon: Users },
   { label: "Tasks", href: "/tasks", icon: ListTodo },
+  { label: "Holidays", href: "/holidays", icon: CalendarDays },
 ];
 
 function getInitials(name: string) {
@@ -61,7 +63,9 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
 
   const initials = user?.name ? getInitials(user.name) : "?";
   const visibleNavLinks = navLinks.filter(
-    (link) => !(link.href === "/users" && user?.designation === "General"),
+    (link) =>
+      !(link.href === "/users" && user?.designation === "General") &&
+      !(link.href === "/holidays" && user?.designation !== "Admin"),
   );
 
   function handleAvatarClick() {
