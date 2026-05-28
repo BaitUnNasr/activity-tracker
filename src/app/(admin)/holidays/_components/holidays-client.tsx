@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/src/lib/utils";
+import { Button } from "@/src/components/ui/button";
 import {
   Card,
   CardAction,
@@ -85,13 +86,18 @@ export function HolidaysClient({ initialHolidays }: { initialHolidays: HolidayRo
     return m;
   }, [holidays]);
 
+  const yearHolidays = useMemo(
+    () => holidays.filter((h) => h.startDate.startsWith(String(cursor.year))),
+    [holidays, cursor.year],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q
-      ? holidays.filter((h) => h.name.toLowerCase().includes(q))
-      : holidays;
+      ? yearHolidays.filter((h) => h.name.toLowerCase().includes(q))
+      : yearHolidays;
     return [...list].sort((a, b) => a.startDate.localeCompare(b.startDate));
-  }, [holidays, query]);
+  }, [yearHolidays, query]);
 
   const thisMonthCount = holidays.filter((h) => {
     const d = parseISO(h.startDate);
@@ -164,13 +170,13 @@ export function HolidaysClient({ initialHolidays }: { initialHolidays: HolidayRo
             </span>
           </div>
         </div>
-        <button
+        <Button
           onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand text-gray-900 text-sm font-semibold hover:brightness-105 active:scale-[0.98] transition shadow-[0_6px_18px_-8px_rgba(196,245,66,0.5)]"
+          className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 active:scale-[0.98] gap-2 h-auto py-2.5 px-5"
         >
           <Plus className="h-4 w-4" />
           Add holiday
-        </button>
+        </Button>
       </div>
 
       {/* ── Main grid ───────────────────────────────────── */}
@@ -185,7 +191,7 @@ export function HolidaysClient({ initialHolidays }: { initialHolidays: HolidayRo
         />
         <SidePanel
           holidays={filtered}
-          allHolidays={holidays}
+          allHolidays={yearHolidays}
           byDate={byDate}
           selectedDate={selectedDate}
           onRequestDelete={(id, name) => setPendingDelete({ id, name })}
@@ -265,24 +271,30 @@ function CalendarCard({
         <CardDescription>Click a day to inspect its holiday.</CardDescription>
         <CardAction>
           <div className="flex items-center gap-1.5">
-            <button
+            <Button
+              variant="outline"
+              size="icon-sm"
               onClick={() => stepMonth(-1)}
-              className="h-8 w-8 grid place-items-center rounded-full bg-muted border border-border hover:bg-accent transition"
+              className="rounded-full"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={goToday}
-              className="px-3 h-8 rounded-full bg-muted border border-border text-xs font-medium hover:bg-accent transition"
+              className="rounded-full px-3 text-xs font-medium"
             >
               Today
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
               onClick={() => stepMonth(1)}
-              className="h-8 w-8 grid place-items-center rounded-full bg-muted border border-border hover:bg-accent transition"
+              className="rounded-full"
             >
               <ChevronRight className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         </CardAction>
       </CardHeader>
@@ -305,15 +317,16 @@ function CalendarCard({
             const isSelected = key === selectedDate;
             const isTd = isToday(dayNum);
             return (
-              <button
+              <Button
                 key={idx}
                 type="button"
+                variant="ghost"
                 title={events.map((e) => e.name).join(", ")}
                 onClick={() => setSelectedDate(key)}
                 className={cn(
-                  "relative h-[45px] md:h-[72px] rounded-xl border p-2 text-left flex flex-col justify-between transition-all overflow-hidden",
+                  "relative h-[45px] md:h-[72px] w-full rounded-xl border p-2 text-left flex flex-col justify-between transition-all overflow-hidden",
                   hasHoliday
-                    ? "bg-brand/10 border-brand/25"
+                    ? "bg-brand/10 border-brand/25 hover:bg-brand/15"
                     : "bg-muted border-border hover:bg-accent/60",
                   isTd && "ring-2 ring-brand ring-offset-1 ring-offset-card",
                   isSelected && "ring-2 ring-brand/70",
@@ -337,7 +350,7 @@ function CalendarCard({
                     <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-brand" />
                   </>
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -394,9 +407,14 @@ function SidePanel({
                 className="flex-1 bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground"
               />
               {query && (
-                <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => setQuery("")}
+                  className="text-muted-foreground hover:text-foreground"
+                >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -457,7 +475,7 @@ function SelectedDayCard({ date, events }: { date: string; events: HolidayRow[] 
         <div className={cn(
           "h-12 w-12 rounded-xl shrink-0 grid place-items-center font-bold text-lg border",
           has
-            ? "bg-brand border-brand/40 text-gray-900"
+            ? "bg-brand border-brand/40 text-foreground"
             : "bg-muted border-border text-muted-foreground",
         )}>
           {d.getDate()}
@@ -514,9 +532,10 @@ function HolidayRow({
       isSelected && "bg-brand/5",
       isRemoving && "opacity-0 -translate-x-3",
     )}>
-      <button
+      <Button
+        variant="ghost"
         onClick={onJump}
-        className="flex items-center gap-3 text-left min-w-0 hover:opacity-80 transition-opacity"
+        className="flex items-center gap-3 text-left min-w-0 h-auto py-0 px-0 rounded-none justify-start hover:bg-transparent hover:opacity-80 transition-opacity"
       >
         <div className="h-11 w-[42px] shrink-0 rounded-xl bg-muted border border-border flex flex-col items-center justify-center gap-0.5">
           <span className="text-[9px] font-semibold text-muted-foreground tracking-wide uppercase">
@@ -535,15 +554,17 @@ function HolidayRow({
               : start.toLocaleDateString("en-US", { weekday: "short" })}
           </p>
         </div>
-      </button>
+      </Button>
 
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={onDelete}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-muted border border-border text-xs text-muted-foreground hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive transition-colors"
+        className="rounded-full text-muted-foreground hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive gap-1.5 text-xs"
       >
         <Trash2 className="h-3 w-3" />
         Delete
-      </button>
+      </Button>
     </li>
   );
 }
@@ -578,19 +599,16 @@ function DeleteConfirmModal({
           </p>
         </div>
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-full bg-muted border border-border text-sm hover:bg-accent transition-colors"
-          >
+          <Button variant="outline" onClick={onCancel} className="rounded-full">
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onConfirm}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-destructive text-background text-sm font-semibold hover:opacity-90 transition"
+            className="rounded-full gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -669,13 +687,15 @@ function HolidayFormModal({
               <p className="text-[10px] font-semibold text-brand tracking-widest uppercase">New entry</p>
               <h3 className="text-xl font-bold tracking-tight mt-1 text-foreground">Add a holiday</h3>
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-sm"
               onClick={onClose}
-              className="h-8 w-8 rounded-full bg-muted border border-border grid place-items-center text-muted-foreground hover:text-foreground transition-colors"
+              className="rounded-full text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
 
           <div className="px-6 py-5 space-y-4">
@@ -699,13 +719,17 @@ function HolidayFormModal({
                 </span>
                 <Popover open={startOpen} onOpenChange={setStartOpen}>
                   <PopoverTrigger asChild>
-                    <button
+                    <Button
                       type="button"
-                      className={cn(inputCls, "flex items-center justify-between gap-2 text-left", !startDate && "text-muted-foreground")}
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-between gap-2 text-left rounded-xl h-10 px-3 font-normal",
+                        !startDate && "text-muted-foreground",
+                      )}
                     >
                       <span className="truncate text-xs">{startDate ? fmtDate(startDate) : "Pick a date"}</span>
                       <CalendarIcon className="h-4 w-4 shrink-0 opacity-60" />
-                    </button>
+                    </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" selected={startDate} onSelect={handleStartSelect} />
@@ -719,13 +743,17 @@ function HolidayFormModal({
                 </span>
                 <Popover open={endOpen} onOpenChange={setEndOpen}>
                   <PopoverTrigger asChild>
-                    <button
+                    <Button
                       type="button"
-                      className={cn(inputCls, "flex items-center justify-between gap-2 text-left", !endDate && "text-muted-foreground")}
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-between gap-2 text-left rounded-xl h-10 px-3 font-normal",
+                        !endDate && "text-muted-foreground",
+                      )}
                     >
                       <span className="truncate text-xs">{endDate ? fmtDate(endDate) : "Pick a date"}</span>
                       <CalendarIcon className="h-4 w-4 shrink-0 opacity-60" />
-                    </button>
+                    </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
@@ -743,21 +771,17 @@ function HolidayFormModal({
           </div>
 
           <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-full bg-muted border border-border text-sm hover:bg-accent transition-colors"
-            >
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-full">
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={!isValid || isPending}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-brand text-gray-900 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-105 transition"
+              className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
             >
               <Plus className="h-3.5 w-3.5" />
               {isPending ? "Saving…" : "Add holiday"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
