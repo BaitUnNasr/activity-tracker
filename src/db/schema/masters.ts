@@ -9,6 +9,13 @@ import {
   text,
 } from "drizzle-orm/pg-core";
 
+export const holidayMaster = pgTable("holiday_master", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+});
+
 import { user } from "./auth";
 
 export const designationMaster = pgTable("designation_master", {
