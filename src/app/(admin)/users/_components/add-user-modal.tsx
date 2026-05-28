@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { cn } from "@/src/lib/utils";
+import { Button } from "@/src/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -110,12 +111,14 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
               Fill in the details to create an account.
             </p>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
-            className="h-8 w-8 rounded-full hover:bg-muted grid place-items-center text-muted-foreground hover:text-foreground transition-colors"
+            className="rounded-full text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
@@ -157,13 +160,15 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
                   onChange={(e) => set("password", e.target.value)}
                   placeholder="Min. 8 characters"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-xs"
                   onClick={() => setShowPassword((s) => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                </Button>
               </div>
             </Field>
 
@@ -215,20 +220,21 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <div className="flex items-center justify-end gap-2 pt-1">
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-full text-sm border border-border hover:bg-muted transition-colors"
+              className="rounded-full"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={!isValid || isPending}
-              className="px-5 py-2.5 rounded-full text-sm font-medium bg-brand text-gray-900 disabled:opacity-50 transition-opacity"
+              className="rounded-full bg-brand text-gray-900 hover:bg-brand hover:brightness-105 h-auto py-2.5 px-5"
             >
               {isPending ? "Creating…" : "Create User"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

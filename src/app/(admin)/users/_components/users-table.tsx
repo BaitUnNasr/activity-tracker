@@ -183,13 +183,13 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
           </CardDescription>
           {canAddUser && (
             <CardAction>
-              <button
+              <Button
                 onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-brand text-foreground hover:opacity-90 transition-opacity"
+                className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-4"
               >
                 <UserPlus className="h-4 w-4" />
                 Add User
-              </button>
+              </Button>
             </CardAction>
           )}
         </CardHeader>
@@ -250,9 +250,10 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
                           className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap"
                         >
                           {header.column.getCanSort() ? (
-                            <button
+                            <Button
+                              variant="ghost"
                               onClick={header.column.getToggleSortingHandler()}
-                              className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                              className="h-auto p-0 gap-1 font-medium text-muted-foreground hover:text-foreground hover:bg-transparent uppercase tracking-wide text-xs"
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
                               {
@@ -263,7 +264,7 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
                                   <ArrowUpDown className="h-3 w-3 opacity-40" />
                                 )
                               }
-                            </button>
+                            </Button>
                           ) : (
                             flexRender(header.column.columnDef.header, header.getContext())
                           )}
@@ -300,15 +301,21 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
             <div className="flex items-center justify-between gap-3 px-4 py-3 bg-muted border-t border-border flex-wrap">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Rows per page</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => table.setPageSize(Number(e.target.value))}
-                  className="bg-card border border-border rounded-lg px-2 py-1 text-xs focus:outline-none"
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => table.setPageSize(Number(v))}
                 >
-                  {PAGE_SIZE_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                  <SelectTrigger size="sm" className="h-7 w-auto text-xs rounded-lg border-border px-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {PAGE_SIZE_OPTIONS.map((s) => (
+                        <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 <span className="ml-1">{start}–{end} of {totalRows}</span>
               </div>
 
