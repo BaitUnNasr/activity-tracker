@@ -62,6 +62,22 @@ export const userBranchLink = pgTable(
   (table) => [index("ubl_userId_idx").on(table.userId)],
 );
 
+export const taskMaster = pgTable("task_master", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const taskAnswerOption = pgTable("task_answer_option", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id")
+    .notNull()
+    .references(() => taskMaster.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  designations: text("designations").array(), // null = all designations
+});
+
 export const designationMasterRelations = relations(designationMaster, ({ many }) => ({
   userLinks: many(userDesignationLink),
 }));

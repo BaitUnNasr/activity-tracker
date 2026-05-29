@@ -65,7 +65,8 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
   const visibleNavLinks = navLinks.filter(
     (link) =>
       !(link.href === "/users" && user?.designation === "General") &&
-      !(link.href === "/holidays" && user?.designation !== "Admin"),
+      !(link.href === "/holidays" && user?.designation !== "Admin") &&
+      !(link.href === "/tasks" && user?.designation !== "Admin"),
   );
 
   function handleAvatarClick() {

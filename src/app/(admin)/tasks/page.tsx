@@ -1,8 +1,12 @@
-export default function TasksPage() {
+import { fetchTasks } from "./actions";
+import { TaskMasterClient } from "./_components/task-master-client";
+
+export default async function TasksPage() {
+  const tasks = await fetchTasks();
+
   return (
-    <div className="mt-7">
-      <h1 className="text-3xl font-semibold tracking-tight text-foreground">Tasks</h1>
-      <p className="text-sm text-muted-foreground mt-1.5">Track and manage your activity tasks.</p>
+    <div className="mt-6">
+      <TaskMasterClient initialTasks={tasks} />
     </div>
   );
 }
