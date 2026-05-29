@@ -9,6 +9,7 @@ import { hashPassword } from "better-auth/crypto";
 
 import { auth } from "@/src/lib/auth";
 import { db } from "@/src/db/client";
+import { getErrorMessage } from "@/src/lib/utils";
 import {
   user,
   account,
@@ -180,7 +181,6 @@ export async function createUser(input: CreateUserInput): Promise<ActionResult> 
     revalidatePath("/users");
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Something went wrong";
-    return { success: false, message };
+    return { success: false, message: getErrorMessage(err) };
   }
 }

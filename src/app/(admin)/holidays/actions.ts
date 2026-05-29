@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/src/db/client";
 import { holidayMaster } from "@/src/db/schema";
+import { getErrorMessage } from "@/src/lib/utils";
 
 export type HolidayRow = {
   id: number;
@@ -42,7 +43,7 @@ export async function createHoliday(input: {
     revalidatePath("/holidays");
     return { success: true };
   } catch (err) {
-    return { success: false, message: err instanceof Error ? err.message : "Something went wrong" };
+    return { success: false, message: getErrorMessage(err) };
   }
 }
 
@@ -52,6 +53,6 @@ export async function deleteHoliday(id: number): Promise<ActionResult> {
     revalidatePath("/holidays");
     return { success: true };
   } catch (err) {
-    return { success: false, message: err instanceof Error ? err.message : "Something went wrong" };
+    return { success: false, message: getErrorMessage(err) };
   }
 }
