@@ -4,7 +4,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
-import { useIsMobile } from "@/src/lib/s/use-mobile"
+import { useIsMobile } from "@/src/hooks/use-mobile"
 import { cn } from "@/src/lib/utils"
 import { Button } from "@/src/components/ui/button"
 import { Input } from "@/src/components/ui/input"

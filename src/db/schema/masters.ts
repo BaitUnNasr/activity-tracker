@@ -5,6 +5,7 @@ import {
   index,
   integer,
   pgTable,
+  real,
   serial,
   text,
 } from "drizzle-orm/pg-core";
@@ -76,6 +77,15 @@ export const taskAnswerOption = pgTable("task_answer_option", {
   label: text("label").notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
   designations: text("designations").array(), // null = all designations
+});
+
+export const scheduleMaster = pgTable("schedule_master", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  fulltimeHours: real("fulltime_hours").notNull().default(8),
+  traineeHours: real("trainee_hours").notNull().default(5),
 });
 
 export const designationMasterRelations = relations(designationMaster, ({ many }) => ({
