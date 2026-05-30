@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo } from "react";
 import {
   useReactTable,
@@ -49,20 +50,28 @@ const columns: ColumnDef<UserRow>[] = [
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => {
-      const { name, email } = row.original;
+      const { id, name, email } = row.original;
       const initials = name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
       return (
-        <div className="flex items-center gap-3">
+        <Link
+          href={`/users/${id}`}
+          className="group flex items-center gap-3 hover:opacity-80 transition-opacity"
+        >
           <Avatar className="h-8 w-8 shrink-0">
             <AvatarFallback className="bg-brand text-foreground text-xs font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
+
           <div className="min-w-0">
-            <div className="font-medium text-foreground truncate">{name}</div>
-            <div className="text-xs text-muted-foreground truncate">{email}</div>
+            <div className="font-medium underline group-hover:font-bold text-foreground truncate transition-all">
+              {name}
+            </div>
+            <div className="text-xs text-muted-foreground truncate">
+              {email}
+            </div>
           </div>
-        </div>
+        </Link>
       );
     },
   },
@@ -175,7 +184,7 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
   return (
     <>
       <Card>
-        <CardHeader>
+        <CardHeader className="px-4 md:px-6">
           <CardTitle className="text-lg font-semibold">All Users</CardTitle>
           <CardDescription>
             {table.getFilteredRowModel().rows.length}{" "}
@@ -194,7 +203,7 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
           )}
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-4 md:px-6">
           {/* Filter bar */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-[200px]">
