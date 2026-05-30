@@ -16,6 +16,7 @@ export type ScheduleRow = {
 };
 
 export type ActionResult = { success: true } | { success: false; message: string };
+export type CreateResult = { success: true; id: number } | { success: false; message: string };
 
 export async function fetchSchedules(): Promise<ScheduleRow[]> {
   const rows = await db
@@ -32,17 +33,23 @@ export async function fetchSchedules(): Promise<ScheduleRow[]> {
   }));
 }
 
-export async function createSchedule(input: Omit<ScheduleRow, "id">): Promise<ActionResult> {
+export async function createSchedule(input: Omit<ScheduleRow, "id">): Promise<CreateResult> {
+  if (input.endDate < input.startDate) {
+    return { success: false, message: "End date must be on or after start date" };
+  }
   try {
-    await db.insert(scheduleMaster).values({
-      name: input.name.trim(),
-      startDate: input.startDate,
-      endDate: input.endDate,
-      fulltimeHours: input.fulltimeHours,
-      traineeHours: input.traineeHours,
-    });
+    const [row] = await db
+      .insert(scheduleMaster)
+      .values({
+        name: input.name.trim(),
+        startDate: input.startDate,
+        endDate: input.endDate,
+        fulltimeHours: input.fulltimeHours,
+        traineeHours: input.traineeHours,
+      })
+      .returning({ id: scheduleMaster.id });
     revalidatePath("/schedule");
-    return { success: true };
+    return { success: true, id: row.id };
   } catch (err) {
     return { success: false, message: getErrorMessage(err) };
   }
@@ -52,6 +59,20 @@ export async function updateSchedule(
   id: number,
   patch: Partial<Omit<ScheduleRow, "id">>,
 ): Promise<ActionResult> {
+  const start = patch.startDate;
+  const end = patch.endDate;
+  if (start !== undefined && end !== undefined && end < start) {
+    return { success: false, message: "End date must be on or after start date" };
+  }
+  // Fetch the current row to check if this is an active schedule
+  if (end !== undefined) {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const [current] = await db.select({ startDate: scheduleMaster.startDate, endDate: scheduleMaster.endDate }).from(scheduleMaster).where(eq(scheduleMaster.id, id));
+    if (current && current.startDate <= todayStr && end < todayStr) {
+      return { success: false, message: "End date cannot be moved before today for an active schedule" };
+    }
+  }
   try {
     await db
       .update(scheduleMaster)

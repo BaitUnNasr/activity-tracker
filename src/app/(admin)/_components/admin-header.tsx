@@ -45,6 +45,7 @@ const navLinks = [
   { label: "Tasks", href: "/tasks", icon: ListTodo },
   { label: "Holidays", href: "/holidays", icon: CalendarDays },
   { label: "Schedule", href: "/schedule", icon: CalendarClock },
+  { label: "Task Master", href: "/task-master", icon: ListTodo },
 ];
 
 function getInitials(name: string) {
@@ -68,8 +69,9 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
     (link) =>
       !(link.href === "/users" && user?.designation === "General") &&
       !(link.href === "/holidays" && user?.designation !== "Admin") &&
-      !(link.href === "/tasks" && user?.designation !== "Admin") &&
-      !(link.href === "/schedule" && user?.designation !== "Admin"),
+      !(link.href === "/tasks" && user?.designation == "Admin") &&
+      !(link.href === "/schedule" && user?.designation !== "Admin") &&
+      !(link.href === "/task-master" && user?.designation !== "Admin"),
   );
 
   function handleAvatarClick() {
