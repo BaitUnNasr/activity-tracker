@@ -43,6 +43,7 @@ import {
 import {
   addDays,
   countDays,
+  countWorkingDays,
   fmtDateRange,
   fmtDisplayDate,
   fmtHours,
@@ -345,10 +346,11 @@ function ScheduleEditor({
   onRequestDelete: () => void;
 }) {
   const sm = STATUS_META[statusOf(schedule, today)];
-  const days = Math.round(
+  const calDays = Math.round(
     (new Date(schedule.endDate).getTime() - new Date(schedule.startDate).getTime()) / 86400000,
   ) + 1;
-  const weeks = (days / 7).toFixed(1);
+  const workingDays = countWorkingDays(schedule.startDate, schedule.endDate);
+  const weeks = (calDays / 7).toFixed(1);
 
   return (
     <Card className="gap-0">
@@ -362,7 +364,8 @@ function ScheduleEditor({
               <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", sm.dotClass)} />
               {sm.label}
             </span>
-            <span className="text-xs text-muted-foreground">{days} days · {weeks} weeks</span>
+            <span className="text-xs text-muted-foreground">{workingDays} working days · {weeks} weeks</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted border border-border text-[10.5px] font-medium text-muted-foreground">Mon – Sat</span>
             {isActive && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10.5px] font-semibold">
                 <Lock className="h-2.5 w-2.5" />
@@ -403,7 +406,7 @@ function ScheduleEditor({
       <CardContent className="pt-5 pb-5">
         <div className="mb-4">
           <h3 className="text-sm font-bold text-foreground">Working hours</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Applies every working day in the date range.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Applies every Mon–Sat in the date range.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <RoleCard role="fulltimeHours" schedule={schedule} />

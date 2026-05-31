@@ -49,6 +49,18 @@ export function countDays(start: string, end: string): number {
   return Math.round((parseDateLocal(end).getTime() - parseDateLocal(start).getTime()) / 86400000) + 1;
 }
 
+/** Count Mon–Sat days (excluding Sundays) in an inclusive date range. */
+export function countWorkingDays(start: string, end: string): number {
+  let count = 0;
+  const cur = parseDateLocal(start);
+  const endDate = parseDateLocal(end);
+  while (cur <= endDate) {
+    if (cur.getDay() !== 0) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
 export function fmtDateRange(start: string, end: string): string {
   const a = parseDateLocal(start), b = parseDateLocal(end);
   const sameYear = a.getFullYear() === b.getFullYear();

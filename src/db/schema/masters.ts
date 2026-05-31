@@ -5,6 +5,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   real,
   serial,
   text,
@@ -87,6 +88,30 @@ export const scheduleMaster = pgTable("schedule_master", {
   fulltimeHours: real("fulltime_hours").notNull().default(8),
   traineeHours: real("trainee_hours").notNull().default(5),
 });
+
+export const taskEntry = pgTable(
+  "task_entry",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    taskId: integer("task_id").notNull().references(() => taskMaster.id, { onDelete: "cascade" }),
+    answer: text("answer").notNull(),
+    hours: real("hours").notNull(),
+  },
+  (table) => [index("te_userId_date_idx").on(table.userId, table.date)],
+);
+
+export const taskDayMeta = pgTable(
+  "task_day_meta",
+  {
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    halfDay: boolean("half_day").default(false).notNull(),
+    onLeave: boolean("on_leave").default(false).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.date] })],
+);
 
 export const designationMasterRelations = relations(designationMaster, ({ many }) => ({
   userLinks: many(userDesignationLink),
