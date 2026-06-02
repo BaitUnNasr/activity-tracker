@@ -200,7 +200,7 @@ export function TransferBranchButton({
             <div className="px-7 pt-7 pb-5">
               <div className="flex items-center gap-3.5 mb-1.5">
                 <div className="h-11 w-11 rounded-2xl bg-brand grid place-items-center shrink-0">
-                  <MapPin className="h-5 w-5 text-gray-900" />
+                  <MapPin className="h-5 w-5 text-foreground" />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold tracking-tight text-foreground">Transfer Branch</h3>
@@ -246,7 +246,7 @@ export function TransferBranchButton({
               <Button
                 type="submit"
                 disabled={!valid || isPending}
-                className="rounded-full bg-brand text-gray-900 hover:bg-brand hover:brightness-105 gap-2 h-auto py-2.5 px-5"
+                className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2.5 px-5"
               >
                 <Check className="h-3.5 w-3.5" />
                 {isPending ? "Transferring…" : "Confirm Transfer"}
@@ -323,7 +323,7 @@ export function UpdateDesignationButton({
             <div className="px-7 pt-7 pb-5">
               <div className="flex items-center gap-3.5 mb-1.5">
                 <div className="h-11 w-11 rounded-2xl bg-brand grid place-items-center shrink-0">
-                  <ShieldCheck className="h-5 w-5 text-gray-900" />
+                  <ShieldCheck className="h-5 w-5 text-foreground" />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold tracking-tight text-foreground">Update Designation</h3>
@@ -390,7 +390,7 @@ export function UpdateDesignationButton({
               <Button
                 type="submit"
                 disabled={!valid || isPending}
-                className="rounded-full bg-brand text-gray-900 hover:bg-brand hover:brightness-105 gap-2 h-auto py-2.5 px-5"
+                className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2.5 px-5"
               >
                 <Check className="h-3.5 w-3.5" />
                 {isPending ? "Updating…" : "Confirm Update"}

@@ -18,7 +18,7 @@ export const DESIGNATION_RANK: Record<string, number> = {
 };
 
 export const TAG_META: Record<TagType, { label: string; className: string }> = {
-  start: { label: "Joined",   className: "bg-muted border border-border text-muted-foreground" },
+  start: { label: "Joined",   className: "bg-muted border border-border text-foreground/70" },
   move:  { label: "Transfer", className: "bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400" },
   up:    { label: "Promoted", className: "bg-brand/15 border border-brand/25 text-foreground" },
   down:  { label: "Demotion", className: "bg-destructive/10 border border-destructive/20 text-destructive" },
@@ -122,7 +122,7 @@ export function HistoryTrack({
   return (
     <div className="mt-5">
       <div className="flex items-center gap-2 mb-3.5">
-        <div className="h-6 w-6 rounded-lg bg-brand/10 border border-brand/20 grid place-items-center text-foreground shrink-0">
+        <div className="h-6 w-6 rounded-lg bg-brand grid place-items-center text-foreground shrink-0 ring-1 ring-foreground/10 shadow-sm">
           {icon}
         </div>
         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</span>

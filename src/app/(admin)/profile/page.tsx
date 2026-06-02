@@ -13,6 +13,7 @@ import {
   designationMaster,
 } from "@/src/db/schema";
 import { getSessionUser, type SessionUser } from "@/src/lib/session";
+import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { ChangePasswordForm } from "./_components/change-password-form";
 import { type HistoryEntry, DetailRow, HistorySection } from "../_components/user-card";
 
@@ -49,7 +50,8 @@ export default async function ProfilePage() {
 
   return (
     <div className="mt-6">
-      <div>
+      <div className="relative isolate">
+        <HeaderGlow />
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">My Profile</h1>
         <p className="text-muted-foreground mt-2">Manage your personal information and account security.</p>
       </div>
@@ -100,7 +102,10 @@ function PersonalInfo({ user }: { user: SessionUser | null }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Personal Information</CardTitle>
+        <CardTitle className="flex items-center gap-2.5 text-lg font-semibold">
+          <IconChip size="sm"><User className="h-3.5 w-3.5 text-foreground" /></IconChip>
+          Personal Information
+        </CardTitle>
         <CardDescription>Your account details as registered in the system.</CardDescription>
       </CardHeader>
       <CardContent>

@@ -4,8 +4,7 @@ import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
 import { ArrowLeft, BadgeCheck, Briefcase, Building2, Mail, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
-import { cn } from "@/src/lib/utils";
-import { Badge } from "@/src/components/ui/badge";
+import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { db } from "@/src/db/client";
 import {
@@ -92,7 +91,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   return (
     <div className="mt-6">
       {/* Back + header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="relative isolate flex items-center gap-3 mb-6">
+        <HeaderGlow />
         <Link
           href="/users"
           className="h-9 w-9 rounded-full border border-border bg-muted grid place-items-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
@@ -124,16 +124,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             <span className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-brand text-foreground">
               # {userData.employeeCode}
             </span>
-            {/* <Badge
-              variant="outline"
-              className={cn(
-                userData.isActive
-                  ? "bg-brand/10 border-brand/30 text-foreground"
-                  : "bg-muted border-border text-muted-foreground",
-              )}
-            >
-              {userData.isActive ? "Active" : "Inactive"}
-            </Badge> */}
             <StatusToggle userId={userData.id} isActive={userData.isActive} />
           </div>
 
@@ -170,7 +160,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Personal Information</CardTitle>
+              <CardTitle className="flex items-center gap-2.5 text-lg font-semibold">
+                <IconChip size="sm"><User className="h-3.5 w-3.5 text-foreground" /></IconChip>
+                Personal Information
+              </CardTitle>
               <CardDescription>Account details for this user.</CardDescription>
             </CardHeader>
             <CardContent>

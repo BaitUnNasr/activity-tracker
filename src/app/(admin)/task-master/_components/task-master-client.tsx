@@ -33,6 +33,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/src/components/ui/empty";
+import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import {
   createAnswerOption,
   createTask,
@@ -50,8 +51,6 @@ const DESIGNATION_META = [
   { name: "Supervisor", chip: "bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400",    dot: "bg-purple-500" },
   { name: "General",    chip: "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
 ] as const;
-
-type DesignationName = (typeof DESIGNATION_META)[number]["name"];
 
 function getDesignationColors(name: string) {
   return DESIGNATION_META.find((d) => d.name === name);
@@ -197,7 +196,8 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="relative isolate flex flex-wrap items-end justify-between gap-4">
+        <HeaderGlow />
         <div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
             Task Master
@@ -212,9 +212,7 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
         <Card className="gap-0">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2.5 text-xl font-bold">
-              <div className="h-7 w-7 rounded-lg bg-brand/10 border border-brand/20 grid place-items-center shrink-0">
-                <ClipboardList className="h-3.5 w-3.5 text-brand" />
-              </div>
+              <IconChip size="sm"><ClipboardList className="h-3.5 w-3.5 text-foreground" /></IconChip>
               All Tasks
               <Badge variant="outline">{tasks.length}</Badge>
             </CardTitle>
@@ -245,7 +243,7 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
                   <div className={cn(
                     "h-8 w-8 shrink-0 rounded-xl flex items-center justify-center text-xs font-bold border transition-colors",
                     selectedTaskId === task.id
-                      ? "bg-brand border-brand/40 text-gray-900"
+                      ? "bg-brand border-brand/40 text-foreground"
                       : "bg-muted border-border text-muted-foreground",
                   )}>
                     {idx + 1}
@@ -277,7 +275,7 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
                   <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     {editingTaskId === task.id ? (
                       <>
-                        <Button variant="ghost" size="icon-xs" onClick={handleSaveEdit} className="text-brand hover:text-brand hover:bg-brand/10">
+                        <Button variant="ghost" size="icon-xs" onClick={handleSaveEdit} className="text-foreground hover:text-foreground hover:bg-brand/10">
                           <Check className="h-3.5 w-3.5" />
                         </Button>
                         <Button variant="ghost" size="icon-xs" onClick={() => setEditingTaskId(null)} className="text-muted-foreground hover:text-foreground">
@@ -292,7 +290,7 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
                         <Button variant="ghost" size="icon-xs" onClick={() => setPendingDeleteTask({ id: task.id, name: task.name })} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                        {selectedTaskId === task.id && <ChevronRight className="h-3.5 w-3.5 text-brand" />}
+                        {selectedTaskId === task.id && <ChevronRight className="h-3.5 w-3.5 text-foreground" />}
                       </>
                     )}
                   </div>
@@ -376,7 +374,7 @@ function AnswerPanel({
     <Card className="gap-0">
       <CardHeader className="border-b border-border min-w-0">
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-semibold tracking-widest uppercase text-brand mb-0.5">Selected task</p>
+          <p className="text-[10px] font-semibold tracking-widest uppercase text-foreground mb-0.5">Selected task</p>
           <CardTitle className="text-base font-bold truncate">{task.name}</CardTitle>
         </div>
         <CardAction>
@@ -401,7 +399,7 @@ function AnswerPanel({
             <Button
               variant="ghost"
               onClick={onRequestAddAnswer}
-              className="text-xs text-brand hover:text-brand hover:bg-brand/10 gap-1 h-auto py-1.5 px-3 rounded-full"
+              className="text-xs text-foreground hover:text-foreground hover:bg-brand/10 gap-1 h-auto py-1.5 px-3 rounded-full"
             >
               <Plus className="h-3 w-3" />
               Add the first one
@@ -513,7 +511,7 @@ function AnswerOptionModal({
       <form onSubmit={handleSubmit}>
         <div className="flex items-start justify-between px-6 py-5 border-b border-border">
           <div>
-            <p className="text-[10px] font-semibold text-brand tracking-widest uppercase">{taskName}</p>
+            <p className="text-[10px] font-semibold text-foreground tracking-widest uppercase">{taskName}</p>
             <h3 className="text-xl font-bold tracking-tight mt-1 text-foreground">
               {mode === "add" ? "Add answer option" : "Edit answer option"}
             </h3>
@@ -572,7 +570,7 @@ function AnswerOptionModal({
           <Button
             type="submit"
             disabled={!label.trim() || isPending}
-            className="rounded-full bg-brand text-gray-900 hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
+            className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
           >
             {mode === "add" ? <Plus className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
             {isPending ? (mode === "add" ? "Adding…" : "Saving…") : (mode === "add" ? "Add option" : "Save changes")}
@@ -605,7 +603,7 @@ function AddTaskModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: s
       <form onSubmit={handleSubmit}>
         <div className="flex items-start justify-between px-6 py-5 border-b border-border">
           <div>
-            <p className="text-[10px] font-semibold text-brand tracking-widest uppercase">New task</p>
+            <p className="text-[10px] font-semibold text-foreground tracking-widest uppercase">New task</p>
             <h3 className="text-xl font-bold tracking-tight mt-1 text-foreground">Add a task</h3>
           </div>
           <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-muted-foreground hover:text-foreground">
@@ -632,7 +630,7 @@ function AddTaskModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: s
           <Button
             type="submit"
             disabled={!name.trim() || isPending}
-            className="rounded-full bg-brand text-gray-900 hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
+            className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
           >
             <Plus className="h-3.5 w-3.5" />
             {isPending ? "Adding…" : "Add task"}

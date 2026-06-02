@@ -33,6 +33,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/src/components/ui/empty";
+import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import {
   createSchedule,
   deleteSchedule,
@@ -130,7 +131,8 @@ export function ScheduleMasterClient({ initialSchedules }: { initialSchedules: S
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="relative isolate flex flex-wrap items-end justify-between gap-4">
+        <HeaderGlow />
         <div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
             Schedule Master
@@ -155,7 +157,8 @@ export function ScheduleMasterClient({ initialSchedules }: { initialSchedules: S
         {/* Left: schedule list */}
         <Card className="gap-0">
           <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center gap-2 text-base font-bold">
+            <CardTitle className="flex items-center gap-2.5 text-base font-bold">
+              <IconChip size="sm"><CalendarDays className="h-3.5 w-3.5 text-foreground" /></IconChip>
               All schedules
               <Badge variant="outline">{visibleSchedules.length}</Badge>
             </CardTitle>

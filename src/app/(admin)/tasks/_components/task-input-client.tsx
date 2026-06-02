@@ -30,6 +30,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
+import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { saveDay, type TaskForPicker, type TasksPageData } from "../actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -323,7 +324,8 @@ export function TaskInputClient({
   return (
     <>
       {/* ── Header ── */}
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+      <div className="relative isolate flex flex-wrap items-end justify-between gap-4 mb-6">
+        <HeaderGlow />
         <div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
             Task Input
@@ -503,7 +505,7 @@ export function TaskInputClient({
                     <Button
                       onClick={() => { setPickStep("task"); setPickedTaskId(null); }}
                       disabled={availableTasks.length === 0 || total >= target}
-                      className="w-full rounded-xl bg-brand text-gray-900 hover:bg-brand hover:brightness-105 gap-2 h-10"
+                      className="w-full rounded-xl bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-10"
                     >
                       <Plus className="h-4 w-4" />
                       {total >= target
@@ -617,9 +619,7 @@ function CalendarCard({
     <Card className="gap-0">
       <CardHeader className="border-b border-border">
         <CardTitle className="flex items-center gap-2.5 text-xl font-bold">
-          <div className="h-7 w-7 rounded-lg bg-brand/10 border border-brand/20 grid place-items-center shrink-0">
-            <CalendarDays className="h-3.5 w-3.5 text-brand" />
-          </div>
+          <IconChip size="sm"><CalendarDays className="h-3.5 w-3.5 text-foreground" /></IconChip>
           {MONTHS[viewMonth]} {viewYear}
         </CardTitle>
         <CardDescription>Pick a day to log or review your tasks.</CardDescription>
@@ -926,7 +926,7 @@ function HalfDayBlockedModal({
         </div>
 
         <div className="flex items-center justify-end px-6 py-4 border-t border-border">
-          <Button onClick={onClose} className="rounded-full bg-brand text-gray-900 hover:bg-brand hover:brightness-105 px-5">
+          <Button onClick={onClose} className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 px-5">
             Got it
           </Button>
         </div>
@@ -1293,7 +1293,7 @@ function AnswerPicker({
                 : "bg-background border-border text-foreground hover:bg-muted",
             )}
           >
-            {pickedAnswer === ans.label && !isCustom && <Check className="inline h-3 w-3 mr-1.5 text-brand" />}
+            {pickedAnswer === ans.label && !isCustom && <Check className="inline h-3 w-3 mr-1.5 text-foreground" />}
             {ans.label}
           </button>
         ))}
@@ -1348,7 +1348,7 @@ function AnswerPicker({
         <Button
           onClick={onConfirm}
           disabled={!canConfirm}
-          className="w-full rounded-lg bg-brand text-gray-900 hover:bg-brand hover:brightness-105 gap-1.5 h-9 text-sm"
+          className="w-full rounded-lg bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-1.5 h-9 text-sm"
         >
           <Check className="h-3.5 w-3.5" />
           Add task

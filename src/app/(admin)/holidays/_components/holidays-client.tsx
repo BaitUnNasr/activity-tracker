@@ -30,6 +30,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/src/components/ui/popover";
+import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { createHoliday, deleteHoliday, type HolidayRow } from "../actions";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -152,7 +153,8 @@ export function HolidaysClient({ initialHolidays }: { initialHolidays: HolidayRo
   return (
     <>
       {/* ── Page header ─────────────────────────────────── */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="relative isolate flex flex-wrap items-end justify-between gap-4">
+        <HeaderGlow />
         <div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
             Holiday Master
@@ -263,9 +265,7 @@ function CalendarCard({
     <Card>
       <CardHeader className="border-b border-border">
         <CardTitle className="flex items-center gap-2.5 text-xl font-bold">
-          <div className="h-7 w-7 rounded-lg bg-brand/10 border border-brand/20 grid place-items-center shrink-0">
-            <CalendarIcon className="h-3.5 w-3.5 text-brand" />
-          </div>
+          <IconChip size="sm"><CalendarIcon className="h-3.5 w-3.5 text-foreground" /></IconChip>
           {MONTHS[month]} {year}
         </CardTitle>
         <CardDescription>Click a day to inspect its holiday.</CardDescription>
