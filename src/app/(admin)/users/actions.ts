@@ -19,13 +19,7 @@ import {
   branchMaster,
 } from "@/src/db/schema";
 import { getSessionUser } from "@/src/lib/session";
-
-const VISIBLE_DESIGNATIONS: Record<string, string[]> = {
-  Admin: [],
-  Chairman: ["Management", "Supervisor", "General"],
-  Management: ["Supervisor", "General"],
-  Supervisor: ["General"],
-};
+import { VISIBLE_DESIGNATIONS } from "@/src/lib/access";
 
 export type UserRow = {
   id: string;

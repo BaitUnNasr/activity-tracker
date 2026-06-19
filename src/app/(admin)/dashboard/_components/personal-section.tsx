@@ -67,7 +67,7 @@ export function PersonalSection({
   showGreeting?: boolean;
 }) {
   const {
-    today, dailyTarget, currentSchedule, upcomingHolidays,
+    today, dailyTarget, todayHalfDay, todayOnLeave, currentSchedule, upcomingHolidays,
     todayTasks, todayTotal, weekData, weekTotal,
     monthLogged, monthTarget, streak,
   } = data;
@@ -131,7 +131,7 @@ export function PersonalSection({
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <TodayProgressCard todayTasks={todayTasks} todayTotal={todayTotal} dailyTarget={dailyTarget} today={today} />
+          <TodayProgressCard todayTasks={todayTasks} todayTotal={todayTotal} dailyTarget={dailyTarget} halfDay={todayHalfDay} onLeave={todayOnLeave} today={today} />
           <WeekCard weekData={weekData} weekTotal={weekTotal} dailyTarget={dailyTarget} />
         </div>
         <div className="flex flex-col gap-6">
@@ -147,14 +147,23 @@ export function PersonalSection({
 // ─── Today's Progress Card ────────────────────────────────────────────────────
 
 function TodayProgressCard({
-  todayTasks, todayTotal, dailyTarget, today,
-}: Pick<PersonalDashboardData, "todayTasks" | "todayTotal" | "dailyTarget" | "today">) {
-  const pct = Math.min(1, todayTotal / dailyTarget);
-  const remaining = Math.max(0, dailyTarget - todayTotal);
+  todayTasks, todayTotal, dailyTarget, halfDay, onLeave, today,
+}: Pick<PersonalDashboardData, "todayTasks" | "todayTotal" | "dailyTarget" | "today"> & {
+  halfDay: boolean;
+  onLeave: boolean;
+}) {
+  // Half-day halves the target; on-leave days require no logging.
+  const target = halfDay ? dailyTarget / 2 : dailyTarget;
+  const pct = target > 0 ? Math.min(1, todayTotal / target) : 0;
+  const remaining = Math.max(0, target - todayTotal);
   const done = remaining === 0;
   const dateLabel = new Date(today + "T00:00:00").toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric",
   });
+
+  const caption = onLeave
+    ? `On leave · ${dateLabel}`
+    : `${halfDay ? "Half-day target" : "Daily target"} ${fmtHrs(target)} · ${dateLabel}`;
 
   return (
     <Card className={cn("gap-0 py-0")}>
@@ -162,61 +171,72 @@ function TodayProgressCard({
         <CardHead
           icon={<Target className="h-4 w-4 text-foreground" />}
           title="Today's task progress"
-          description={`Daily target ${dailyTarget}h · ${dateLabel}`}
+          description={caption}
           right={
-            done
-              ? <StatusPill tone="active"><span className="h-1.5 w-1.5 rounded-full bg-foreground/80" />Target met</StatusPill>
-              : <StatusPill tone="muted">In progress</StatusPill>
+            onLeave
+              ? <StatusPill tone="muted">On leave</StatusPill>
+              : halfDay
+                ? <StatusPill tone="active"><span className="text-[11px] font-extrabold leading-none">½</span>Half day</StatusPill>
+                : done
+                  ? <StatusPill tone="active"><span className="h-1.5 w-1.5 rounded-full bg-foreground/80" />Target met</StatusPill>
+                  : <StatusPill tone="muted">In progress</StatusPill>
           }
         />
       </div>
       <CardContent className="py-6">
-        <div className="flex gap-6 items-center flex-wrap sm:flex-nowrap">
-          {/* Ring */}
-          <ProgressRing pct={pct} logged={todayTotal} target={dailyTarget} taskColors={todayTasks.map((t) => taskStroke(t.taskId))} />
-
-          {/* Breakdown */}
-          <div className="flex-1 min-w-0 w-full">
-            {/* Stacked bar */}
-            <div className="h-3.5 rounded-full bg-muted ring-1 ring-border overflow-hidden flex">
-              {todayTasks.map((t) => (
-                <div
-                  key={t.taskId}
-                  title={t.name}
-                  className={cn("h-full", taskColor(t.taskId))}
-                  style={{ width: `${(t.hours / dailyTarget) * 100}%` }}
-                />
-              ))}
-            </div>
-
-            <div className="flex justify-between mt-3 mb-4">
-              <span className="text-xs text-muted-foreground">
-                <b className="text-foreground font-bold tabular-nums">{fmtHrs(todayTotal)}</b> logged
-              </span>
-              <span className={cn(
-                "text-xs font-bold",
-                done ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400",
-              )}>
-                {done ? "All hours logged" : `${fmtHrs(remaining)} to target`}
-              </span>
-            </div>
-
-            {/* Task list */}
-            {todayTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-3">No tasks logged yet today.</p>
-            ) : (
-              <ul className="divide-y divide-border/60">
-                {todayTasks.map((t) => (
-                  <li key={t.taskId} className="flex items-center gap-3 py-2.5">
-                    <span className={cn("w-2.5 h-2.5 rounded-[3px] shrink-0", taskColor(t.taskId))} />
-                    <span className="flex-1 text-sm font-semibold text-foreground truncate">{t.name}</span>
-                    <span className="text-sm font-bold text-foreground tabular-nums">{fmtHrs(t.hours)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {onLeave ? (
+          <div className="rounded-2xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/20 px-6 py-8 text-center">
+            <div className="text-base font-bold text-sky-700 dark:text-sky-400">On leave today</div>
+            <p className="mt-1.5 text-sm text-muted-foreground">No tasks are required for this day.</p>
           </div>
-        </div>
+        ) : (
+          <div className="flex gap-6 items-center flex-wrap sm:flex-nowrap">
+            {/* Ring */}
+            <ProgressRing pct={pct} logged={todayTotal} target={target} taskColors={todayTasks.map((t) => taskStroke(t.taskId))} />
+
+            {/* Breakdown */}
+            <div className="flex-1 min-w-0 w-full">
+              {/* Stacked bar */}
+              <div className="h-3.5 rounded-full bg-muted ring-1 ring-border overflow-hidden flex">
+                {todayTasks.map((t) => (
+                  <div
+                    key={t.taskId}
+                    title={t.name}
+                    className={cn("h-full", taskColor(t.taskId))}
+                    style={{ width: `${Math.min(100, (t.hours / target) * 100)}%` }}
+                  />
+                ))}
+              </div>
+
+              <div className="flex justify-between mt-3 mb-4">
+                <span className="text-xs text-muted-foreground">
+                  <b className="text-foreground font-bold tabular-nums">{fmtHrs(todayTotal)}</b> logged
+                </span>
+                <span className={cn(
+                  "text-xs font-bold",
+                  done ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400",
+                )}>
+                  {done ? "All hours logged" : `${fmtHrs(remaining)} to target`}
+                </span>
+              </div>
+
+              {/* Task list */}
+              {todayTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-3">No tasks logged yet today.</p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {todayTasks.map((t) => (
+                    <li key={t.taskId} className="flex items-center gap-3 py-2.5">
+                      <span className={cn("w-2.5 h-2.5 rounded-[3px] shrink-0", taskColor(t.taskId))} />
+                      <span className="flex-1 text-sm font-semibold text-foreground truncate">{t.name}</span>
+                      <span className="text-sm font-bold text-foreground tabular-nums">{fmtHrs(t.hours)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

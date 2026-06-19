@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Building2, ChevronRight, Clock } from "lucide-react";
 
 import { cn } from "@/src/lib/utils";
 import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
-import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import type { DashboardUserRow, UnderTargetRow } from "../actions";
 import { CardHead } from "./dashboard-ui";
@@ -49,7 +49,8 @@ function CountBadge({ count, tone }: { count: number; tone: "destructive" | "amb
   );
 }
 
-function PersonRow({ name, type, designation, branch, right }: {
+function PersonRow({ id, name, type, designation, branch, right }: {
+  id: string;
   name: string;
   type: string;
   designation: string | null;
@@ -76,14 +77,13 @@ function PersonRow({ name, type, designation, branch, right }: {
         </div>
       </div>
       {right}
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label={`View ${name}`}
-        className="h-8 w-8 rounded-lg shrink-0"
+      <Link
+        href={`/users/${id}/activity`}
+        aria-label={`View ${name}'s activity`}
+        className="h-8 w-8 rounded-lg shrink-0 grid place-items-center border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
       >
         <ChevronRight className="h-4 w-4" />
-      </Button>
+      </Link>
     </div>
   );
 }
@@ -131,7 +131,7 @@ export function NotLoggedCard({ users, today }: { users: DashboardUserRow[]; tod
           </div>
         ) : (
           visible.map((u) => (
-            <PersonRow key={u.id} name={u.name} type={u.type} designation={u.designation} branch={u.branch} />
+            <PersonRow key={u.id} id={u.id} name={u.name} type={u.type} designation={u.designation} branch={u.branch} />
           ))
         )}
       </div>
@@ -185,6 +185,7 @@ export function UnderTargetCard({ rows }: { rows: UnderTargetRow[] }) {
           visible.map(({ user: u, hoursLogged, target }) => (
             <PersonRow
               key={u.id}
+              id={u.id}
               name={u.name}
               type={u.type}
               designation={u.designation}
