@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/src/db/client";
 import {
+  backdatePermission,
   holidayMaster,
   scheduleMaster,
   taskAnswerOption,
@@ -46,6 +47,8 @@ export type TasksPageData = {
   dailyTarget: number;
   entries: EntryRow[];
   dayMetas: DayMetaRow[];
+  // Past dates a superior has granted this user permission to backdate-log.
+  backdateDates: string[];
 };
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
@@ -56,7 +59,7 @@ export async function fetchTasksPageData(
   userType: "F" | "T",
   today: string,
 ): Promise<TasksPageData> {
-  const [allTasks, allAnswers, holidays, schedules, entriesRaw, dayMetasRaw] =
+  const [allTasks, allAnswers, holidays, schedules, entriesRaw, dayMetasRaw, backdateRaw] =
     await Promise.all([
       db.select().from(taskMaster).where(eq(taskMaster.isActive, true)).orderBy(asc(taskMaster.id)),
       db.select().from(taskAnswerOption).orderBy(asc(taskAnswerOption.sortOrder), asc(taskAnswerOption.id)),
@@ -68,6 +71,7 @@ export async function fetchTasksPageData(
       db.select().from(scheduleMaster),
       db.select().from(taskEntry).where(eq(taskEntry.userId, userId)),
       db.select().from(taskDayMeta).where(eq(taskDayMeta.userId, userId)),
+      db.select({ date: backdatePermission.date }).from(backdatePermission).where(eq(backdatePermission.userId, userId)),
     ]);
 
   // Filter answer options by the user's current designation
@@ -111,6 +115,7 @@ export async function fetchTasksPageData(
       halfDay: m.halfDay,
       onLeave: m.onLeave,
     })),
+    backdateDates: backdateRaw.map((b) => b.date),
   };
 }
 

@@ -9,6 +9,8 @@ import {
   real,
   serial,
   text,
+  timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const holidayMaster = pgTable("holiday_master", {
@@ -111,6 +113,27 @@ export const taskDayMeta = pgTable(
     onLeave: boolean("on_leave").default(false).notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.date] })],
+);
+
+// A superior granting a specific past date on which the given user may log
+// (backdate) tasks. One row = "userId may add/edit tasks for `date`".
+export const backdatePermission = pgTable(
+  "backdate_permission",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    grantedBy: text("granted_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    grantedAt: timestamp("granted_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("bp_user_date_uniq").on(table.userId, table.date),
+    index("bp_userId_idx").on(table.userId),
+  ],
 );
 
 export const designationMasterRelations = relations(designationMaster, ({ many }) => ({

@@ -43,6 +43,13 @@
       "when": 1748800000000,
       "tag": "0005_leave_option",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1748900000000,
+      "tag": "0006_backdate_permission",
+      "breakpoints": true
     }
   ]
 }

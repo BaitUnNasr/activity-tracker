@@ -100,8 +100,10 @@ export function TaskInputClient({
   const isToday = selected === today;
   const isFuture = selected > today;
   const isPast = selected < today;
+  // A superior may grant specific past dates for backdated logging.
+  const isBackdateAllowed = initialData.backdateDates.includes(selected);
   const isLocked = isHoliday || isWeekend || isFuture;
-  const isEditable = isToday && !isLocked;
+  const isEditable = (isToday || isBackdateAllowed) && !isLocked;
 
   const missingCount = useMemo(() => {
     let n = 0;
@@ -432,7 +434,12 @@ export function TaskInputClient({
                     />
                   )}
 
-                  {isPast && (
+                  {isPast && isEditable && (
+                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 text-center mt-1">
+                      Backdated entry enabled by your supervisor for this day.
+                    </p>
+                  )}
+                  {isPast && !isEditable && (
                     <p className="text-[11px] text-muted-foreground text-center mt-1">
                       Past day — view only
                     </p>
