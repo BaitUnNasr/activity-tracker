@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
-import { ArrowLeft, BadgeCheck, Briefcase, Building2, Mail, User } from "lucide-react";
+import { Activity, ArrowLeft, BadgeCheck, Briefcase, Building2, Mail, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
 import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
@@ -15,6 +15,7 @@ import {
   designationMaster,
 } from "@/src/db/schema";
 import { getSessionUser } from "@/src/lib/session";
+import { canViewUserActivity } from "@/src/lib/access";
 import { type HistoryEntry, HistorySection } from "../../_components/user-card";
 import {
   StatusToggle,
@@ -82,6 +83,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const currentBranch      = branches.find((b) => !b.endDate);
   const currentDesignation = designations.find((d) => !d.endDate);
 
+  // Hierarchy + branch scope: only Admin or a higher-rank user in the same branch may view this user.
+  if (!canViewUserActivity(sessionUser, { designation: currentDesignation?.name ?? null, branch: currentBranch?.name ?? null })) {
+    redirect("/dashboard");
+  }
+
   const branchHistory: HistoryEntry[]      = branches.map((b) => ({ name: b.name ?? "—", startDate: b.startDate, endDate: b.endDate ?? null }));
   const designationHistory: HistoryEntry[] = designations.map((d) => ({ name: d.name ?? "—", startDate: d.startDate, endDate: d.endDate ?? null }));
 
@@ -108,6 +114,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             {currentDesignation?.name ?? "—"} · {currentBranch?.name ?? "—"}
           </p>
         </div>
+        <Link
+          href={`/users/${id}/activity`}
+          className="ml-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand text-foreground text-sm font-bold ring-1 ring-foreground/10 shadow-sm hover:brightness-105 transition-all active:scale-[0.98] shrink-0"
+        >
+          <Activity className="h-4 w-4" />
+          View activity
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

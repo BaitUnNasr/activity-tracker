@@ -8,6 +8,7 @@ import {
   designationMaster,
   holidayMaster,
   scheduleMaster,
+  taskDayMeta,
   taskEntry,
   taskMaster,
   user,
@@ -15,6 +16,7 @@ import {
   userDesignationLink,
 } from "@/src/db/schema";
 import type { SessionUser } from "@/src/lib/session";
+import { VISIBLE_DESIGNATIONS } from "@/src/lib/access";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -75,6 +77,8 @@ export type WeekDay = {
 export type PersonalDashboardData = {
   today: string;
   dailyTarget: number;
+  todayHalfDay: boolean;
+  todayOnLeave: boolean;
   currentSchedule: DashboardScheduleRow | null;
   upcomingHolidays: DashboardHolidayRow[];
   todayTasks: { taskId: number; name: string; hours: number }[];
@@ -87,13 +91,6 @@ export type PersonalDashboardData = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const VISIBLE_DESIGNATIONS: Record<string, string[]> = {
-  Admin: [],
-  Chairman: ["Management", "Supervisor", "General"],
-  Management: ["Supervisor", "General"],
-  Supervisor: ["General"],
-};
 
 function getToday(): string {
   const d = new Date();
@@ -117,7 +114,7 @@ function getWeekStart(today: string): string {
 // Count Mon–Fri days between two dates inclusive
 function countWorkingDays(from: string, to: string): number {
   let count = 0;
-  let cur = new Date(from + "T00:00:00");
+  const cur = new Date(from + "T00:00:00");
   const end = new Date(to + "T00:00:00");
   while (cur <= end) {
     const d = cur.getDay();
@@ -254,7 +251,7 @@ export async function fetchPersonalDashboardData(
   const monthStart = today.slice(0, 7) + "-01";
   const thirtyDaysAgo = addDays(today, -30);
 
-  const [schedules, allHolidays, todayEntriesRaw, weekEntriesRaw, monthTotalRaw, recentDatesRaw, taskMasters] =
+  const [schedules, allHolidays, todayEntriesRaw, weekEntriesRaw, monthTotalRaw, recentDatesRaw, taskMasters, todayMetaRaw] =
     await Promise.all([
       db.select().from(scheduleMaster),
 
@@ -314,7 +311,16 @@ export async function fetchPersonalDashboardData(
         .orderBy(desc(taskEntry.date)),
 
       db.select({ id: taskMaster.id, name: taskMaster.name }).from(taskMaster),
+
+      db
+        .select({ halfDay: taskDayMeta.halfDay, onLeave: taskDayMeta.onLeave })
+        .from(taskDayMeta)
+        .where(and(eq(taskDayMeta.userId, sessionUser.id), eq(taskDayMeta.date, today)))
+        .limit(1),
     ]);
+
+  const todayHalfDay = todayMetaRaw[0]?.halfDay ?? false;
+  const todayOnLeave = todayMetaRaw[0]?.onLeave ?? false;
 
   // Active schedule
   const activeSchedule =
@@ -386,7 +392,7 @@ export async function fetchPersonalDashboardData(
   const loggedDates = new Set(recentDatesRaw.map((r) => r.date));
   let streak = 0;
   // Start from today if logged, else from yesterday
-  let streakCur = new Date(today + "T00:00:00");
+  const streakCur = new Date(today + "T00:00:00");
   if (!loggedDates.has(today)) streakCur.setDate(streakCur.getDate() - 1);
   for (let i = 0; i < 30; i++) {
     const dateStr = `${streakCur.getFullYear()}-${String(streakCur.getMonth() + 1).padStart(2, "0")}-${String(streakCur.getDate()).padStart(2, "0")}`;
@@ -413,6 +419,8 @@ export async function fetchPersonalDashboardData(
   return {
     today,
     dailyTarget,
+    todayHalfDay,
+    todayOnLeave,
     currentSchedule,
     upcomingHolidays,
     todayTasks,
