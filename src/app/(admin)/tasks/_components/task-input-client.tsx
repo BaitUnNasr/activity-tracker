@@ -37,6 +37,7 @@ import {
   MONTHS,
   parseISO,
   taskColor,
+  toDateStr,
   type LocalDay,
   type LocalEntry,
 } from "./timesheet-shared";
@@ -95,15 +96,23 @@ export function TaskInputClient({
   const target = localDay.halfDay ? halfTarget : dailyTarget;
   const total = localDay.entries.reduce((s, e) => s + e.hours, 0);
 
+  // A day's tasks stay editable until the end of the next day, so both today
+  // and yesterday are within the normal grace window.
+  const yesterday = toDateStr(
+    new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() - 1),
+  );
+
   const isHoliday = holidayMap.has(selected);
   const isWeekend = parseISO(selected).getDay() === 0; // Sunday only
   const isToday = selected === today;
+  const isYesterday = selected === yesterday;
   const isFuture = selected > today;
   const isPast = selected < today;
   // A superior may grant specific past dates for backdated logging.
   const isBackdateAllowed = initialData.backdateDates.includes(selected);
+  const isGraceWindow = isToday || isYesterday;
   const isLocked = isHoliday || isWeekend || isFuture;
-  const isEditable = (isToday || isBackdateAllowed) && !isLocked;
+  const isEditable = (isGraceWindow || isBackdateAllowed) && !isLocked;
 
   const missingCount = useMemo(() => {
     let n = 0;
@@ -358,7 +367,7 @@ export function TaskInputClient({
                   )}
 
                   <div className="flex flex-col gap-2 mb-3">
-                    {localDay.entries.length === 0 && isPast && pickStep === "none" && (
+                    {localDay.entries.length === 0 && isPast && !isEditable && pickStep === "none" && (
                       <div className="px-4 py-5 border border-dashed border-border rounded-xl text-center text-sm text-muted-foreground">
                         No tasks were logged for this day.
                       </div>
@@ -434,7 +443,12 @@ export function TaskInputClient({
                     />
                   )}
 
-                  {isPast && isEditable && (
+                  {isYesterday && isEditable && (
+                    <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 text-center mt-1">
+                      You can still edit yesterday&apos;s tasks until the end of today.
+                    </p>
+                  )}
+                  {isPast && !isYesterday && isEditable && (
                     <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 text-center mt-1">
                       Backdated entry enabled by your supervisor for this day.
                     </p>
