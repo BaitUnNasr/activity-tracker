@@ -87,7 +87,9 @@ export const scheduleMaster = pgTable("schedule_master", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   startDate: date("start_date").notNull(),
-  endDate: date("end_date").notNull(),
+  // null = open-ended: the schedule continues forever. No later schedule may be
+  // created while an open-ended one is in effect until it is given an end date.
+  endDate: date("end_date"),
   fulltimeHours: real("fulltime_hours").notNull().default(8),
   traineeHours: real("trainee_hours").notNull().default(5),
 });

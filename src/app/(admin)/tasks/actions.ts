@@ -96,9 +96,9 @@ export async function fetchTasksPageData(
       .map((a) => ({ id: a.id, label: a.label })),
   }));
 
-  // Daily target from the schedule that covers today
+  // Daily target from the schedule that covers today (null end = open-ended)
   const activeSchedule = schedules.find(
-    (s) => s.startDate <= today && s.endDate >= today,
+    (s) => s.startDate <= today && (s.endDate === null || s.endDate >= today),
   );
   const dailyTarget = activeSchedule
     ? userType === "F"

@@ -13,9 +13,13 @@ export function getToday(): string {
   return `${y}-${m}-${day}`;
 }
 
+// Sentinel used when comparing an open-ended (null) end date: it sorts after
+// every real YYYY-MM-DD date, so a null end behaves as "+infinity".
+export const OPEN_END = "9999-12-31";
+
 export function statusOf(s: ScheduleRow, today: string): Status {
   if (today < s.startDate) return "upcoming";
-  if (today > s.endDate) return "past";
+  if (s.endDate !== null && today > s.endDate) return "past";
   return "active";
 }
 
@@ -61,10 +65,14 @@ export function countWorkingDays(start: string, end: string): number {
   return count;
 }
 
-export function fmtDateRange(start: string, end: string): string {
-  const a = parseDateLocal(start), b = parseDateLocal(end);
-  const sameYear = a.getFullYear() === b.getFullYear();
+export function fmtDateRange(start: string, end: string | null): string {
+  const a = parseDateLocal(start);
   const aStr = a.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (end === null) {
+    return `${aStr}, ${a.getFullYear()} – Ongoing`;
+  }
+  const b = parseDateLocal(end);
+  const sameYear = a.getFullYear() === b.getFullYear();
   const bStr = b.toLocaleDateString("en-US", {
     month: "short", day: "numeric",
     ...(sameYear ? {} : { year: "numeric" }),
@@ -91,11 +99,18 @@ export function fmtHours(n: number): string {
 export function findOverlap(
   schedules: ScheduleRow[],
   start: string,
-  end: string,
+  end: string | null,
   excludeId?: number,
 ): ScheduleRow | null {
-  if (!start || !end || end < start) return null;
-  return schedules.find((s) => s.id !== excludeId && start <= s.endDate && end >= s.startDate) ?? null;
+  if (!start) return null;
+  // null end = open-ended (extends to +infinity); "" = not picked yet.
+  const candEnd = end === null ? OPEN_END : end;
+  if (!candEnd || candEnd < start) return null;
+  return schedules.find((s) => {
+    if (s.id === excludeId) return false;
+    const sEnd = s.endDate ?? OPEN_END;
+    return start <= sEnd && candEnd >= s.startDate;
+  }) ?? null;
 }
 
 // ─── Role metadata ────────────────────────────────────────────────────────────

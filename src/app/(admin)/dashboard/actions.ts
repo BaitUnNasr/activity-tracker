@@ -35,7 +35,7 @@ export type DashboardScheduleRow = {
   id: number;
   name: string;
   startDate: string;
-  endDate: string;
+  endDate: string | null;
   fulltimeHours: number;
   traineeHours: number;
 };
@@ -199,7 +199,7 @@ export async function fetchAdminDashboardData(
   ]);
 
   const activeSchedule =
-    schedules.find((s) => s.startDate <= today && s.endDate >= today) ?? null;
+    schedules.find((s) => s.startDate <= today && (s.endDate === null || s.endDate >= today)) ?? null;
   const currentSchedule: DashboardScheduleRow | null = activeSchedule
     ? {
         id: activeSchedule.id,
@@ -324,7 +324,7 @@ export async function fetchPersonalDashboardData(
 
   // Active schedule
   const activeSchedule =
-    schedules.find((s) => s.startDate <= today && s.endDate >= today) ?? null;
+    schedules.find((s) => s.startDate <= today && (s.endDate === null || s.endDate >= today)) ?? null;
   const currentSchedule: DashboardScheduleRow | null = activeSchedule
     ? {
         id: activeSchedule.id,

@@ -407,6 +407,9 @@ function MyScheduleCard({
   const startLabel = schedule
     ? new Date(schedule.startDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
+  const endLabel = schedule && schedule.endDate
+    ? new Date(schedule.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "ongoing";
 
   return (
     <Card className={cn("gap-0 py-0")}>
@@ -414,7 +417,7 @@ function MyScheduleCard({
         <CardHead
           icon={<Clock className="h-4 w-4 text-foreground" />}
           title="My schedule"
-          description={schedule ? `${startLabel} — ongoing` : undefined}
+          description={schedule ? `${startLabel} — ${endLabel}` : undefined}
           right={
             schedule
               ? <StatusPill tone="active"><span className="h-1.5 w-1.5 rounded-full bg-foreground/80" />Active</StatusPill>

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
+  Infinity as InfinityIcon,
   Lock,
   Minus,
   Plus,
@@ -25,7 +26,9 @@ import {
   fmtDateRange,
   fmtDisplayDate,
   fmtHours,
+  getToday,
   parseDateLocal,
+  statusOf,
   toDateStr,
 } from "./schedule-utils";
 
@@ -86,6 +89,47 @@ export function DatePickerInput({
         />
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ─── End-date field with "ongoing" toggle ────────────────────────────────────
+
+function EndDateField({
+  ongoing,
+  onOngoingChange,
+  endDate,
+  onEndDateChange,
+  minDate,
+}: {
+  ongoing: boolean;
+  onOngoingChange: (v: boolean) => void;
+  endDate: string;
+  onEndDateChange: (v: string) => void;
+  minDate?: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5 gap-2">
+        <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase">End date</span>
+        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+          <input
+            type="checkbox"
+            checked={ongoing}
+            onChange={(e) => onOngoingChange(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-border accent-brand"
+          />
+          <span className="text-[11px] font-medium text-muted-foreground">No end date</span>
+        </label>
+      </div>
+      {ongoing ? (
+        <div className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-muted border border-dashed border-border text-sm text-muted-foreground">
+          <InfinityIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Ongoing</span>
+        </div>
+      ) : (
+        <DatePickerInput value={endDate} onChange={onEndDateChange} minDate={minDate} placeholder="End date" />
+      )}
+    </div>
   );
 }
 
@@ -156,6 +200,7 @@ export function AddScheduleModal({
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [ongoing, setOngoing] = useState(false);
   const [fulltimeHours, setFulltimeHours] = useState(8);
   const [traineeHours, setTraineeHours] = useState(5);
   const [error, setError] = useState<string | null>(null);
@@ -163,8 +208,16 @@ export function AddScheduleModal({
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const overlapSchedule = findOverlap(existingSchedules, startDate, endDate);
-  const valid = name.trim() && startDate && endDate && endDate >= startDate && !overlapSchedule;
+  const today = getToday();
+  // End date must be today or later, and on/after the start date.
+  const endMin = startDate && startDate > today ? startDate : today;
+  const effEnd = ongoing ? null : endDate;
+
+  const overlapSchedule = findOverlap(existingSchedules, startDate, effEnd);
+  const valid =
+    name.trim() && startDate &&
+    (ongoing || (endDate && endDate >= startDate)) &&
+    !overlapSchedule;
 
   const stepHours = (current: number, delta: number, set: (v: number) => void) => {
     const next = Math.round((current + delta) * 2) / 2;
@@ -177,7 +230,7 @@ export function AddScheduleModal({
     setError(null);
     startTransition(async () => {
       try {
-        await onAdd({ name: name.trim(), startDate, endDate, fulltimeHours, traineeHours });
+        await onAdd({ name: name.trim(), startDate, endDate: effEnd, fulltimeHours, traineeHours });
       } catch (err) {
         setError(getErrorMessage(err));
       }
@@ -214,14 +267,17 @@ export function AddScheduleModal({
               <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">Start date</span>
               <DatePickerInput value={startDate} onChange={setStartDate} placeholder="Start date" />
             </div>
-            <div>
-              <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">End date</span>
-              <DatePickerInput value={endDate} onChange={setEndDate} minDate={startDate || undefined} placeholder="End date" />
-            </div>
+            <EndDateField
+              ongoing={ongoing}
+              onOngoingChange={setOngoing}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+              minDate={endMin}
+            />
           </div>
           {overlapSchedule && (
             <p className="text-xs text-destructive">
-              Overlaps with &ldquo;{overlapSchedule.name}&rdquo; ({fmtDateRange(overlapSchedule.startDate, overlapSchedule.endDate)})
+              Overlaps with &ldquo;{overlapSchedule.name}&rdquo; ({fmtDateRange(overlapSchedule.startDate, overlapSchedule.endDate)}). Give the ongoing schedule an end date before adding a later one.
             </p>
           )}
 
@@ -272,13 +328,25 @@ export function EditScheduleModal({
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(schedule.name);
   const [startDate, setStartDate] = useState(schedule.startDate);
-  const [endDate, setEndDate] = useState(schedule.endDate);
+  const [endDate, setEndDate] = useState(schedule.endDate ?? "");
+  const [ongoing, setOngoing] = useState(schedule.endDate === null);
   const [fulltimeHours, setFulltimeHours] = useState(schedule.fulltimeHours);
   const [traineeHours, setTraineeHours] = useState(schedule.traineeHours);
   const [error, setError] = useState<string | null>(null);
 
-  const overlapSchedule = findOverlap(existingSchedules, startDate, endDate, schedule.id);
-  const valid = name.trim() && startDate && endDate && endDate >= startDate && !overlapSchedule;
+  const effEnd = ongoing ? null : endDate;
+  // Past schedules keep their historical end; anything still covering today or
+  // upcoming must end today or later.
+  const isPast = statusOf(schedule, today) === "past";
+  const endMin = isPast
+    ? (startDate || undefined)
+    : startDate && startDate > today ? startDate : today;
+
+  const overlapSchedule = findOverlap(existingSchedules, startDate, effEnd, schedule.id);
+  const valid =
+    name.trim() && startDate &&
+    (ongoing || (endDate && endDate >= startDate)) &&
+    !overlapSchedule;
 
   const stepHours = (current: number, delta: number, set: (v: number) => void) => {
     const next = Math.round((current + delta) * 2) / 2;
@@ -290,7 +358,7 @@ export function EditScheduleModal({
     if (!valid || isPending) return;
     setError(null);
     startTransition(async () => {
-      const result = await onSave({ name: name.trim(), startDate, endDate, fulltimeHours, traineeHours });
+      const result = await onSave({ name: name.trim(), startDate, endDate: effEnd, fulltimeHours, traineeHours });
       if (result.success) {
         toast.success("Schedule updated.");
         onClose();
@@ -331,19 +399,17 @@ export function EditScheduleModal({
               <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">Start date</span>
               <DatePickerInput value={startDate} onChange={setStartDate} placeholder="Start date" />
             </div>
-            <div>
-              <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">End date</span>
-              <DatePickerInput
-                value={endDate}
-                onChange={setEndDate}
-                minDate={isActive ? today : (startDate || undefined)}
-                placeholder="End date"
-              />
-            </div>
+            <EndDateField
+              ongoing={ongoing}
+              onOngoingChange={setOngoing}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+              minDate={endMin}
+            />
           </div>
           {overlapSchedule && (
             <p className="text-xs text-destructive">
-              Overlaps with &ldquo;{overlapSchedule.name}&rdquo; ({fmtDateRange(overlapSchedule.startDate, overlapSchedule.endDate)})
+              Overlaps with &ldquo;{overlapSchedule.name}&rdquo; ({fmtDateRange(overlapSchedule.startDate, overlapSchedule.endDate)}). Give the ongoing schedule an end date first.
             </p>
           )}
 

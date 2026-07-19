@@ -306,7 +306,8 @@ function buildDisplayItems(
   visible.forEach((s, i) => {
     items.push({ kind: "schedule", s });
     const next = visible[i + 1];
-    if (next) {
+    // An open-ended schedule (null end) never leaves a gap after it.
+    if (next && s.endDate !== null) {
       const gapStart = addDays(s.endDate, 1);
       const gapEnd   = addDays(next.startDate, -1);
       if (gapStart <= gapEnd) items.push({ kind: "gap", start: gapStart, end: gapEnd });
@@ -349,10 +350,13 @@ function ScheduleEditor({
   onRequestDelete: () => void;
 }) {
   const sm = STATUS_META[statusOf(schedule, today)];
-  const calDays = Math.round(
-    (new Date(schedule.endDate).getTime() - new Date(schedule.startDate).getTime()) / 86400000,
-  ) + 1;
-  const workingDays = countWorkingDays(schedule.startDate, schedule.endDate);
+  const isOngoing = schedule.endDate === null;
+  const calDays = isOngoing
+    ? 0
+    : Math.round(
+        (new Date(schedule.endDate!).getTime() - new Date(schedule.startDate).getTime()) / 86400000,
+      ) + 1;
+  const workingDays = isOngoing ? 0 : countWorkingDays(schedule.startDate, schedule.endDate!);
   const weeks = (calDays / 7).toFixed(1);
 
   return (
@@ -367,7 +371,9 @@ function ScheduleEditor({
               <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", sm.dotClass)} />
               {sm.label}
             </span>
-            <span className="text-xs text-muted-foreground">{workingDays} working days · {weeks} weeks</span>
+            <span className="text-xs text-muted-foreground">
+              {isOngoing ? "Ongoing — no end date" : `${workingDays} working days · ${weeks} weeks`}
+            </span>
             <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-muted border border-border text-[10.5px] font-medium text-muted-foreground">Mon – Sat</span>
             {isActive && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10.5px] font-semibold">
@@ -422,12 +428,12 @@ function ScheduleEditor({
 
 // ─── Static date chip (display-only) ─────────────────────────────────────────
 
-function StaticDateChip({ label, value }: { label: string; value: string }) {
+function StaticDateChip({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-muted border border-border">
       <CalendarDays className="h-3 w-3 text-muted-foreground shrink-0" />
       <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">{label}</span>
-      <span className="text-xs font-medium text-foreground">{fmtDisplayDate(value)}</span>
+      <span className="text-xs font-medium text-foreground">{value === null ? "Ongoing" : fmtDisplayDate(value)}</span>
     </div>
   );
 }
