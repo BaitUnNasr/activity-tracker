@@ -56,6 +56,7 @@ export type TasksPageData = {
 export async function fetchTasksPageData(
   userId: string,
   designation: string | null,
+  branch: string | null,
   userType: "F" | "T",
   today: string,
 ): Promise<TasksPageData> {
@@ -74,13 +75,18 @@ export async function fetchTasksPageData(
       db.select({ date: backdatePermission.date }).from(backdatePermission).where(eq(backdatePermission.userId, userId)),
     ]);
 
-  // Filter answer options by the user's current designation
-  const visibleAnswers = allAnswers.filter(
-    (a) =>
+  // Filter answer options by the user's current designation and branch
+  const visibleAnswers = allAnswers.filter((a) => {
+    const designationOk =
       !a.designations ||
       a.designations.length === 0 ||
-      (designation !== null && a.designations.includes(designation)),
-  );
+      (designation !== null && a.designations.includes(designation));
+    const branchOk =
+      !a.branches ||
+      a.branches.length === 0 ||
+      (branch !== null && a.branches.includes(branch));
+    return designationOk && branchOk;
+  });
 
   const tasks: TaskForPicker[] = allTasks.map((t) => ({
     id: t.id,

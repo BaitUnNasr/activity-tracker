@@ -18,6 +18,7 @@ export default async function TasksPage() {
   const data = await fetchTasksPageData(
     sessionUser.id,
     sessionUser.designation,
+    sessionUser.branch,
     sessionUser.type,
     today,
   );

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/src/db/client";
-import { taskAnswerOption, taskMaster } from "@/src/db/schema";
+import { branchMaster, taskAnswerOption, taskMaster } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
 
 export type AnswerOption = {
@@ -11,6 +11,7 @@ export type AnswerOption = {
   label: string;
   sortOrder: number;
   designations: string[] | null;
+  branches: string[] | null;
 };
 
 export type TaskRow = {
@@ -36,8 +37,17 @@ export async function fetchTasks(): Promise<TaskRow[]> {
     isActive: t.isActive,
     answers: answers
       .filter((a) => a.taskId === t.id)
-      .map((a) => ({ id: a.id, label: a.label, sortOrder: a.sortOrder, designations: a.designations ?? null })),
+      .map((a) => ({ id: a.id, label: a.label, sortOrder: a.sortOrder, designations: a.designations ?? null, branches: a.branches ?? null })),
   }));
+}
+
+export async function fetchBranchNames(): Promise<string[]> {
+  const branches = await db
+    .select({ name: branchMaster.name })
+    .from(branchMaster)
+    .where(eq(branchMaster.isActive, true))
+    .orderBy(asc(branchMaster.name));
+  return branches.map((b) => b.name);
 }
 
 export async function createTask(name: string): Promise<ActionResult> {
@@ -70,9 +80,15 @@ export async function deleteTask(id: number): Promise<ActionResult> {
   }
 }
 
-export async function createAnswerOption(taskId: number, label: string, designations: string[] | null = null): Promise<ActionResult> {
+export async function createAnswerOption(taskId: number, label: string, designations: string[] | null = null, branches: string[] | null = null): Promise<ActionResult> {
   try {
-    await db.insert(taskAnswerOption).values({ taskId, label: label.trim(), sortOrder: 0, designations: designations?.length ? designations : null });
+    await db.insert(taskAnswerOption).values({
+      taskId,
+      label: label.trim(),
+      sortOrder: 0,
+      designations: designations?.length ? designations : null,
+      branches: branches?.length ? branches : null,
+    });
     revalidatePath("/task-master");
     return { success: true };
   } catch (err) {
@@ -80,11 +96,15 @@ export async function createAnswerOption(taskId: number, label: string, designat
   }
 }
 
-export async function updateAnswerOption(id: number, label: string, designations: string[] | null = null): Promise<ActionResult> {
+export async function updateAnswerOption(id: number, label: string, designations: string[] | null = null, branches: string[] | null = null): Promise<ActionResult> {
   try {
     await db
       .update(taskAnswerOption)
-      .set({ label: label.trim(), designations: designations?.length ? designations : null })
+      .set({
+        label: label.trim(),
+        designations: designations?.length ? designations : null,
+        branches: branches?.length ? branches : null,
+      })
       .where(eq(taskAnswerOption.id, id));
     revalidatePath("/task-master");
     return { success: true };

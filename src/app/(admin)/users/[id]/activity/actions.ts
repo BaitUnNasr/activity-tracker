@@ -87,7 +87,7 @@ export async function fetchUserActivity(targetUserId: string): Promise<UserActiv
   const today = getToday();
 
   const [data, grantedRows] = await Promise.all([
-    fetchTasksPageData(target.id, target.designation, userType, today),
+    fetchTasksPageData(target.id, target.designation, target.branch, userType, today),
     db
       .select({ date: backdatePermission.date })
       .from(backdatePermission)

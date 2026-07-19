@@ -56,9 +56,15 @@ function getDesignationColors(name: string) {
   return DESIGNATION_META.find((d) => d.name === name);
 }
 
+// Branches are dynamic (from branch_master), so they share one chip style.
+const BRANCH_CHIP = {
+  chip: "bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400",
+  dot: "bg-teal-500",
+} as const;
+
 // ─── Main Client ──────────────────────────────────────────────────────────────
 
-export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) {
+export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: TaskRow[]; branchNames: string[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -127,18 +133,18 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
     }, 220);
   };
 
-  const handleAddAnswer = async (label: string, designations: string[] | null) => {
+  const handleAddAnswer = async (label: string, designations: string[] | null, branches: string[] | null) => {
     if (!selectedTaskId) return;
     setShowAddAnswer(false);
     const tempId = -Date.now();
     setTasks((prev) =>
       prev.map((t) =>
         t.id === selectedTaskId
-          ? { ...t, answers: [...t.answers, { id: tempId, label, sortOrder: t.answers.length, designations }] }
+          ? { ...t, answers: [...t.answers, { id: tempId, label, sortOrder: t.answers.length, designations, branches }] }
           : t,
       ),
     );
-    const result = await createAnswerOption(selectedTaskId, label, designations);
+    const result = await createAnswerOption(selectedTaskId, label, designations, branches);
     if (!result.success) {
       toast.error(result.message ?? "Failed to add answer option");
       setTasks((prev) =>
@@ -152,16 +158,16 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
     }
   };
 
-  const handleEditAnswer = async (id: number, label: string, designations: string[] | null) => {
+  const handleEditAnswer = async (id: number, label: string, designations: string[] | null, branches: string[] | null) => {
     setPendingEditAnswer(null);
     setTasks((prev) =>
       prev.map((t) =>
         t.id === selectedTaskId
-          ? { ...t, answers: t.answers.map((a) => (a.id === id ? { ...a, label, designations } : a)) }
+          ? { ...t, answers: t.answers.map((a) => (a.id === id ? { ...a, label, designations, branches } : a)) }
           : t,
       ),
     );
-    const result = await updateAnswerOption(id, label, designations);
+    const result = await updateAnswerOption(id, label, designations, branches);
     if (!result.success) {
       toast.error(result.message ?? "Failed to update answer option");
       router.refresh();
@@ -319,6 +325,7 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
         <AnswerOptionModal
           mode="add"
           taskName={selectedTask.name}
+          branchNames={branchNames}
           onClose={() => setShowAddAnswer(false)}
           onSave={handleAddAnswer}
         />
@@ -328,9 +335,10 @@ export function TaskMasterClient({ initialTasks }: { initialTasks: TaskRow[] }) 
         <AnswerOptionModal
           mode="edit"
           taskName={selectedTask?.name ?? ""}
+          branchNames={branchNames}
           initial={pendingEditAnswer}
           onClose={() => setPendingEditAnswer(null)}
-          onSave={(label, designations) => handleEditAnswer(pendingEditAnswer.id, label, designations)}
+          onSave={(label, designations, branches) => handleEditAnswer(pendingEditAnswer.id, label, designations, branches)}
         />
       )}
 
@@ -433,7 +441,19 @@ function AnswerPanel({
                       })
                     ) : (
                       <span className="inline-flex items-center px-1.5 rounded-full border border-border bg-muted text-[10px] font-medium text-muted-foreground">
-                        All
+                        All designations
+                      </span>
+                    )}
+                    {ans.branches?.length ? (
+                      ans.branches.map((b) => (
+                        <span key={b} className={cn("inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] font-medium", BRANCH_CHIP.chip)}>
+                          <span className={cn("h-1 w-1 rounded-full shrink-0", BRANCH_CHIP.dot)} />
+                          {b}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 rounded-full border border-border bg-muted text-[10px] font-medium text-muted-foreground">
+                        All branches
                       </span>
                     )}
                   </div>
@@ -475,19 +495,22 @@ function ModalShell({ onClose, children }: { onClose: () => void; children: Reac
 function AnswerOptionModal({
   mode,
   taskName,
+  branchNames,
   initial,
   onClose,
   onSave,
 }: {
   mode: "add" | "edit";
   taskName: string;
+  branchNames: string[];
   initial?: AnswerOption;
   onClose: () => void;
-  onSave: (label: string, designations: string[] | null) => Promise<void>;
+  onSave: (label: string, designations: string[] | null, branches: string[] | null) => Promise<void>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [label, setLabel] = useState(initial?.label ?? "");
   const [designations, setDesignations] = useState<string[]>(initial?.designations ?? []);
+  const [branches, setBranches] = useState<string[]>(initial?.branches ?? []);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -496,7 +519,11 @@ function AnswerOptionModal({
     setError(null);
     startTransition(async () => {
       try {
-        await onSave(label.trim(), designations.length > 0 ? designations : null);
+        await onSave(
+          label.trim(),
+          designations.length > 0 ? designations : null,
+          branches.length > 0 ? branches : null,
+        );
       } catch {
         setError("Something went wrong");
       }
@@ -505,6 +532,9 @@ function AnswerOptionModal({
 
   const toggleDesignation = (d: string) =>
     setDesignations((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
+
+  const toggleBranch = (b: string) =>
+    setBranches((prev) => prev.includes(b) ? prev.filter((x) => x !== b) : [...prev, b]);
 
   return (
     <ModalShell onClose={onClose}>
@@ -534,7 +564,7 @@ function AnswerOptionModal({
           </label>
 
           <div>
-            <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Applies to</span>
+            <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Designations</span>
             <div className="flex flex-wrap gap-1.5">
               {DESIGNATION_META.map(({ name, chip, dot }) => {
                 const active = designations.includes(name);
@@ -559,6 +589,37 @@ function AnswerOptionModal({
               {designations.length === 0
                 ? "No selection — applies to all designations."
                 : `Applies to: ${designations.join(", ")}.`}
+            </p>
+          </div>
+
+          <div>
+            <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Branches</span>
+            <div className="flex flex-wrap gap-1.5">
+              {branchNames.map((name) => {
+                const active = branches.includes(name);
+                return (
+                  <Button
+                    key={name}
+                    type="button"
+                    variant="ghost"
+                    onClick={() => toggleBranch(name)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 h-auto text-xs font-medium gap-1.5",
+                      active ? BRANCH_CHIP.chip : "bg-muted border-border text-muted-foreground hover:bg-muted hover:border-foreground/20",
+                    )}
+                  >
+                    <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", active ? BRANCH_CHIP.dot : "bg-muted-foreground/40")} />
+                    {name}
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {branchNames.length === 0
+                ? "No active branches defined."
+                : branches.length === 0
+                  ? "No selection — applies to all branches."
+                  : `Applies to: ${branches.join(", ")}.`}
             </p>
           </div>
 

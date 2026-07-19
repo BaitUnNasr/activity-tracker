@@ -80,6 +80,7 @@ export const taskAnswerOption = pgTable("task_answer_option", {
   label: text("label").notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
   designations: text("designations").array(), // null = all designations
+  branches: text("branches").array(), // null = all branches
 });
 
 export const scheduleMaster = pgTable("schedule_master", {
