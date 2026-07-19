@@ -22,6 +22,7 @@ import {
   fmtLong,
   getDayStatus,
   parseISO,
+  toDateStr,
   type LocalDay,
 } from "../../../tasks/_components/timesheet-shared";
 import { BackButton } from "./back-button";
@@ -74,9 +75,15 @@ export function ActivityView({
   const total = selectedDay.entries.reduce((s, e) => s + e.hours, 0);
   const target_ = selectedDay.halfDay ? dailyTarget / 2 : dailyTarget;
 
-  // Backdate-access state for the currently selected day.
+  // Backdate-access state for the currently selected day. Yesterday and today
+  // are inside the user's own edit grace window, so no grant is needed there —
+  // only older working days are grantable.
+  const yesterday = toDateStr(
+    new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() - 1),
+  );
+  const isGraceWindow = selected === yesterday || selected === today;
   const isGranted = grantedSet.has(selected);
-  const isBackdatable = isPast && !isWeekend && !isHoliday; // past working day
+  const isBackdatable = selected < yesterday && !isWeekend && !isHoliday; // older past working day
   const grantMode: "grant" | "revoke" | "none" = isGranted
     ? "revoke"
     : isBackdatable
@@ -162,7 +169,9 @@ export function ActivityView({
           title={
             buttonEnabled
               ? undefined
-              : "Select a past working day (not a holiday or Sunday) to grant access"
+              : isGraceWindow && isPast
+                ? "The user can still edit yesterday themselves — no access needed"
+                : "Select a working day older than yesterday (not a holiday or Sunday) to grant access"
           }
         >
           <CalendarClock className="h-4 w-4" />
@@ -205,6 +214,12 @@ export function ActivityView({
                 <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand/15 ring-1 ring-brand/30 text-xs font-semibold text-foreground">
                   <ShieldCheck className="h-3.5 w-3.5" />
                   Backdated logging allowed
+                </div>
+              )}
+              {!isGranted && isGraceWindow && !isLocked && (
+                <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted ring-1 ring-border text-xs font-medium text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Still editable by the user — no access needed
                 </div>
               )}
             </div>

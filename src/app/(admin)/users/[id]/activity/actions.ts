@@ -110,8 +110,14 @@ export async function grantBackdate(targetUserId: string, date: string): Promise
   if (!sessionUser) return { success: false, message: "Unauthorized" };
 
   if (!DATE_RE.test(date)) return { success: false, message: "Invalid date" };
-  const today = getToday();
-  if (date >= today) return { success: false, message: "Only past dates can be granted" };
+  // Users can edit yesterday and today themselves (grace window), so backdate
+  // access is only needed for dates older than yesterday.
+  const now = new Date();
+  const yd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yesterdayStr = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, "0")}-${String(yd.getDate()).padStart(2, "0")}`;
+  if (date >= yesterdayStr) {
+    return { success: false, message: "The user can still edit this day — backdate access is only needed for older dates" };
+  }
   const [y, m, d] = date.split("-").map(Number);
   if (new Date(y, m - 1, d).getDay() === 0) {
     return { success: false, message: "Sundays are non-working days" };
