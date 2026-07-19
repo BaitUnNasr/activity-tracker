@@ -13,6 +13,8 @@ import {
   CardTitle,
 } from "@/src/components/ui/card";
 import { IconChip } from "@/src/components/page-ui";
+import { CalendarWeekToggle } from "@/src/components/calendar-week-toggle";
+import { useCollapsibleCalendar } from "@/src/hooks/use-collapsible-calendar";
 import type { TaskForPicker, TasksPageData } from "../actions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -163,6 +165,9 @@ export function CalendarCard({
     cells.push({ inMonth: dn >= 1 && dn <= dim, dn, i });
   }
 
+  const { expanded, setExpanded, isRowHidden, handleStep, clearWeekAnchor } =
+    useCollapsibleCalendar({ viewYear, viewMonth, selected, today, onStepMonth });
+
   return (
     <Card className="gap-0">
       <CardHeader className="border-b border-border">
@@ -173,13 +178,18 @@ export function CalendarCard({
         <CardDescription>Pick a day to log or review your tasks.</CardDescription>
         <CardAction>
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="icon-sm" onClick={() => onStepMonth(-1)} className="rounded-full">
+            <Button variant="outline" size="icon-sm" onClick={() => handleStep(-1)} className="rounded-full">
               <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="outline" size="sm" onClick={onGoToday} className="rounded-full px-3 text-xs font-medium">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { clearWeekAnchor(); onGoToday(); }}
+              className="rounded-full px-3 text-xs font-medium"
+            >
               Today
             </Button>
-            <Button variant="outline" size="icon-sm" onClick={() => onStepMonth(1)} className="rounded-full">
+            <Button variant="outline" size="icon-sm" onClick={() => handleStep(1)} className="rounded-full">
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -195,9 +205,9 @@ export function CalendarCard({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {cells.map(({ inMonth, dn, i }) => {
-            if (!inMonth) return <div key={i} />;
+            if (!inMonth) return <div key={i} className={cn(isRowHidden(i) && "hidden lg:block")} />;
             const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(dn).padStart(2, "0")}`;
             const dayData = dateStr === selected ? localDay : serverMap.get(dateStr);
             const status = getDayStatus(dateStr, holidayMap, dayData, today, dailyTarget);
@@ -210,10 +220,11 @@ export function CalendarCard({
             return (
               <button
                 key={i}
-                onClick={() => onSelectDate(dateStr)}
+                onClick={() => { clearWeekAnchor(); onSelectDate(dateStr); }}
                 title={holidayName}
                 className={cn(
-                  "relative h-[72px] w-full rounded-xl border-[1.5px] p-2 text-left flex flex-col justify-between transition-all overflow-hidden hover:brightness-[0.97]",
+                  "relative h-[60px] sm:h-[72px] w-full rounded-xl border-[1.5px] p-1.5 sm:p-2 text-left flex-col justify-between transition-all overflow-hidden hover:brightness-[0.97]",
+                  isRowHidden(i) ? "hidden lg:flex" : "flex",
                   meta.cellBg,
                   isSelected
                     ? "border-foreground/50 ring-2 ring-foreground/20 ring-offset-1 ring-offset-background"
@@ -267,8 +278,14 @@ export function CalendarCard({
           })}
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap gap-x-4 gap-y-2 mt-5 pt-4 border-t border-dashed border-border">
+        {/* Mobile week/month toggle */}
+        <CalendarWeekToggle expanded={expanded} onToggle={() => setExpanded(!expanded)} />
+
+        {/* Legend — hidden on mobile while collapsed to keep the page compact */}
+        <div className={cn(
+          "flex-wrap gap-x-4 gap-y-2 mt-5 pt-4 border-t border-dashed border-border",
+          expanded ? "flex" : "hidden lg:flex",
+        )}>
           {[
             { color: "bg-green-500", label: "Logged" },
             { color: "bg-amber-500", label: "Under target" },

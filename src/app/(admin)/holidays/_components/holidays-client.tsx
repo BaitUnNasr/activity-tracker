@@ -31,6 +31,8 @@ import {
   PopoverTrigger,
 } from "@/src/components/ui/popover";
 import { HeaderGlow, IconChip } from "@/src/components/page-ui";
+import { CalendarWeekToggle } from "@/src/components/calendar-week-toggle";
+import { useCollapsibleCalendar } from "@/src/hooks/use-collapsible-calendar";
 import { createHoliday, deleteHoliday, type HolidayRow } from "../actions";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -261,6 +263,15 @@ function CalendarCard({
   const isToday = (d: number) =>
     today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
 
+  const { expanded, setExpanded, isRowHidden, handleStep, clearWeekAnchor } =
+    useCollapsibleCalendar({
+      viewYear: year,
+      viewMonth: month,
+      selected: selectedDate,
+      today: toDateStr(today),
+      onStepMonth: stepMonth,
+    });
+
   return (
     <Card>
       <CardHeader className="border-b border-border">
@@ -274,7 +285,7 @@ function CalendarCard({
             <Button
               variant="outline"
               size="icon-sm"
-              onClick={() => stepMonth(-1)}
+              onClick={() => handleStep(-1)}
               className="rounded-full"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -282,7 +293,7 @@ function CalendarCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={goToday}
+              onClick={() => { clearWeekAnchor(); goToday(); }}
               className="rounded-full px-3 text-xs font-medium"
             >
               Today
@@ -290,7 +301,7 @@ function CalendarCard({
             <Button
               variant="outline"
               size="icon-sm"
-              onClick={() => stepMonth(1)}
+              onClick={() => handleStep(1)}
               className="rounded-full"
             >
               <ChevronRight className="h-3.5 w-3.5" />
@@ -308,9 +319,9 @@ function CalendarCard({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {cells.map(({ inMonth, dayNum, idx }) => {
-            if (!inMonth) return <div key={idx} />;
+            if (!inMonth) return <div key={idx} className={cn(isRowHidden(idx) && "hidden lg:block")} />;
             const key = toDateKey(year, month, dayNum);
             const events = byDate.get(key) ?? [];
             const hasHoliday = events.length > 0;
@@ -322,9 +333,10 @@ function CalendarCard({
                 type="button"
                 variant="ghost"
                 title={events.map((e) => e.name).join(", ")}
-                onClick={() => setSelectedDate(key)}
+                onClick={() => { clearWeekAnchor(); setSelectedDate(key); }}
                 className={cn(
-                  "relative h-[45px] md:h-[72px] w-full rounded-xl border p-2 text-left flex flex-col justify-between transition-all overflow-hidden",
+                  "relative h-[45px] md:h-[72px] w-full rounded-xl border p-2 text-left flex-col justify-between transition-all overflow-hidden",
+                  isRowHidden(idx) ? "hidden lg:flex" : "flex",
                   hasHoliday
                     ? "bg-brand/10 border-brand/25 hover:bg-brand/15"
                     : "bg-muted border-border hover:bg-accent/60",
@@ -354,6 +366,9 @@ function CalendarCard({
             );
           })}
         </div>
+
+        {/* Mobile week/month toggle */}
+        <CalendarWeekToggle expanded={expanded} onToggle={() => setExpanded(!expanded)} />
       </CardContent>
     </Card>
   );
