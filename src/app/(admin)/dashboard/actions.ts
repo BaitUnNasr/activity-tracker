@@ -17,6 +17,7 @@ import {
 } from "@/src/db/schema";
 import type { SessionUser } from "@/src/lib/session";
 import { VISIBLE_DESIGNATIONS } from "@/src/lib/access";
+import type { LeaveType } from "@/src/app/(admin)/tasks/leave";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ export type PersonalDashboardData = {
   dailyTarget: number;
   todayHalfDay: boolean;
   todayOnLeave: boolean;
+  todayLeaveType: LeaveType | null;
   currentSchedule: DashboardScheduleRow | null;
   upcomingHolidays: DashboardHolidayRow[];
   todayTasks: { taskId: number; name: string; hours: number }[];
@@ -313,7 +315,7 @@ export async function fetchPersonalDashboardData(
       db.select({ id: taskMaster.id, name: taskMaster.name }).from(taskMaster),
 
       db
-        .select({ halfDay: taskDayMeta.halfDay, onLeave: taskDayMeta.onLeave })
+        .select({ halfDay: taskDayMeta.halfDay, onLeave: taskDayMeta.onLeave, leaveType: taskDayMeta.leaveType })
         .from(taskDayMeta)
         .where(and(eq(taskDayMeta.userId, sessionUser.id), eq(taskDayMeta.date, today)))
         .limit(1),
@@ -321,6 +323,7 @@ export async function fetchPersonalDashboardData(
 
   const todayHalfDay = todayMetaRaw[0]?.halfDay ?? false;
   const todayOnLeave = todayMetaRaw[0]?.onLeave ?? false;
+  const todayLeaveType = (todayMetaRaw[0]?.leaveType as LeaveType | null) ?? null;
 
   // Active schedule
   const activeSchedule =
@@ -421,6 +424,7 @@ export async function fetchPersonalDashboardData(
     dailyTarget,
     todayHalfDay,
     todayOnLeave,
+    todayLeaveType,
     currentSchedule,
     upcomingHolidays,
     todayTasks,

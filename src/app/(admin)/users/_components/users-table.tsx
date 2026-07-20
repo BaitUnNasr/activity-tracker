@@ -15,6 +15,7 @@ import {
   type PaginationState,
 } from "@tanstack/react-table";
 import {
+  Activity,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -133,6 +134,23 @@ const columns: ColumnDef<UserRow>[] = [
           />
           {active ? "Active" : "Inactive"}
         </span>
+      );
+    },
+  },
+  {
+    id: "activity",
+    header: "Action",
+    enableSorting: false,
+    cell: ({ row }) => {
+      const { id } = row.original;
+      return (
+        <Link
+          href={`/users/${id}/activity`}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground rounded-full border border-border bg-background px-2.5 py-1 hover:bg-brand/10 hover:border-brand/40 transition-colors"
+        >
+          <Activity className="h-3.5 w-3.5" />
+          {/* View activity */}
+        </Link>
       );
     },
   },

@@ -1,6 +1,7 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -114,8 +115,16 @@ export const taskDayMeta = pgTable(
     date: date("date").notNull(),
     halfDay: boolean("half_day").default(false).notNull(),
     onLeave: boolean("on_leave").default(false).notNull(),
+    // Set only when onLeave is true: casual | earned | unpaid.
+    leaveType: text("leave_type"),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.date] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.date] }),
+    check(
+      "leave_type_check",
+      sql`${table.leaveType} IS NULL OR ${table.leaveType} IN ('casual', 'earned', 'unpaid')`,
+    ),
+  ],
 );
 
 // A superior granting a specific past date on which the given user may log

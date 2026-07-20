@@ -16,11 +16,31 @@ import { IconChip } from "@/src/components/page-ui";
 import { CalendarWeekToggle } from "@/src/components/calendar-week-toggle";
 import { useCollapsibleCalendar } from "@/src/hooks/use-collapsible-calendar";
 import type { TaskForPicker, TasksPageData } from "../actions";
+import type { LeaveType } from "../leave";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type LocalEntry = { taskId: number; answer: string; hours: number };
-export type LocalDay = { halfDay: boolean; onLeave: boolean; entries: LocalEntry[] };
+export type LocalDay = {
+  halfDay: boolean;
+  onLeave: boolean;
+  leaveType: LeaveType | null;
+  entries: LocalEntry[];
+};
+
+// ─── Leave types ──────────────────────────────────────────────────────────────
+
+export const LEAVE_TYPE_OPTIONS: { value: LeaveType; label: string; hint: string }[] = [
+  { value: "casual", label: "Casual leave", hint: "Short-notice personal time off" },
+  { value: "earned", label: "Earned leave", hint: "Accrued paid leave" },
+  { value: "unpaid", label: "Unpaid leave", hint: "Leave without pay" },
+];
+
+export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
+  casual: "Casual leave",
+  earned: "Earned leave",
+  unpaid: "Unpaid leave",
+};
 
 export type DayStatus =
   | "complete"
@@ -118,7 +138,12 @@ export function buildServerMap(data: TasksPageData): Map<string, LocalDay> {
   const allDates = new Set([...byDate.keys(), ...data.dayMetas.map((m) => m.date)]);
   allDates.forEach((date) => {
     const meta = data.dayMetas.find((m) => m.date === date);
-    map.set(date, { halfDay: meta?.halfDay ?? false, onLeave: meta?.onLeave ?? false, entries: byDate.get(date) ?? [] });
+    map.set(date, {
+      halfDay: meta?.halfDay ?? false,
+      onLeave: meta?.onLeave ?? false,
+      leaveType: meta?.leaveType ?? null,
+      entries: byDate.get(date) ?? [],
+    });
   });
   return map;
 }
@@ -133,8 +158,10 @@ export function getDayStatus(
   if (holidayMap.has(dateStr)) return "holiday";
   const dow = parseISO(dateStr).getDay();
   if (dow === 0) return "weekend"; // Sunday only — Mon–Sat are working days
-  if (dateStr > today) return "future";
+  // Leave (incl. earned leave planned ahead) shows before the future check so
+  // upcoming leave days render as leave, not blank "future" cells.
   if (dayData?.onLeave) return "leave";
+  if (dateStr > today) return "future";
   const total = dayData?.entries.reduce((s, e) => s + e.hours, 0) ?? 0;
   const target = dayData?.halfDay ? dailyTarget / 2 : dailyTarget;
   if (!dayData || total === 0) return dateStr === today ? "today-empty" : "missing";
@@ -373,25 +400,40 @@ export function LockedNotice({ holidayName, isFuture }: { holidayName?: string; 
 
 // ─── Leave active card ────────────────────────────────────────────────────────
 
-export function LeaveActiveCard({ isEditable, onToggle }: { isEditable: boolean; onToggle?: () => void }) {
+export function LeaveActiveCard({
+  active,
+  onRemove,
+  removeLabel = "Remove leave",
+  leaveType,
+}: {
+  active: boolean;
+  onRemove?: () => void;
+  removeLabel?: string;
+  leaveType?: LeaveType | null;
+}) {
   return (
     <div className={cn(
       "rounded-3xl border px-6 py-8 text-center",
       "bg-sky-50 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800",
     )}>
       <div className="text-base font-bold text-sky-700 dark:text-sky-400">
-        {isEditable ? "On Leave" : "Was on Leave"}
+        {active ? "On Leave" : "Was on Leave"}
       </div>
+      {leaveType && (
+        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-xs font-semibold text-sky-700 dark:text-sky-400">
+          {LEAVE_TYPE_LABEL[leaveType]}
+        </div>
+      )}
       <p className="mt-1.5 text-sm text-muted-foreground">
         No tasks required for this day.
       </p>
-      {isEditable && onToggle && (
+      {onRemove && (
         <Button
-          onClick={onToggle}
+          onClick={onRemove}
           variant="outline"
           className="mt-4 rounded-full text-xs border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-950/40"
         >
-          Remove leave
+          {removeLabel}
         </Button>
       )}
     </div>

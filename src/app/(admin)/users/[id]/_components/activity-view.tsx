@@ -28,7 +28,7 @@ import {
 import { BackButton } from "./back-button";
 import { grantBackdate, revokeBackdate } from "../activity/actions";
 
-const EMPTY_DAY: LocalDay = { halfDay: false, onLeave: false, entries: [] };
+const EMPTY_DAY: LocalDay = { halfDay: false, onLeave: false, leaveType: null, entries: [] };
 
 function fmt(dateStr: string) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
@@ -225,10 +225,10 @@ export function ActivityView({
             </div>
           </Card>
 
-          {isLocked ? (
+          {selectedDay.onLeave && !isHoliday && !isWeekend ? (
+            <LeaveActiveCard active={selected >= today} leaveType={selectedDay.leaveType} />
+          ) : isLocked ? (
             <LockedNotice holidayName={holidayMap.get(selected)} isFuture={isFuture} />
-          ) : selectedDay.onLeave ? (
-            <LeaveActiveCard isEditable={false} />
           ) : (
             <Card className="gap-0 py-0">
               <div className="p-5">

@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  CalendarDays,
   Check,
   ChevronLeft,
   Clock,
+  Loader2,
   Minus,
   Plus,
   TriangleAlert,
@@ -15,6 +17,12 @@ import {
 import { cn } from "@/src/lib/utils";
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
+import { Calendar } from "@/src/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/src/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -22,7 +30,8 @@ import {
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
 import { HeaderGlow } from "@/src/components/page-ui";
-import { saveDay, type TaskForPicker, type TasksPageData } from "../actions";
+import { applyEarnedLeave, revokeLeaveDate, saveDay, type TaskForPicker, type TasksPageData } from "../actions";
+import type { LeaveType } from "../leave";
 import {
   CalendarCard,
   DayBadge,
@@ -34,6 +43,7 @@ import {
   fmtHrs,
   fmtLong,
   getDayStatus,
+  LEAVE_TYPE_OPTIONS,
   MONTHS,
   parseISO,
   taskColor,
@@ -60,12 +70,15 @@ export function TaskInputClient({
 
   const [serverMap, setServerMap] = useState<Map<string, LocalDay>>(() => buildServerMap(initialData));
   const [localDay, setLocalDay] = useState<LocalDay>(
-    () => serverMap.get(today) ?? { halfDay: false, onLeave: false, entries: [] },
+    () => serverMap.get(today) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] },
   );
   const [isDirty, setIsDirty] = useState(false);
   const [confirmHalf, setConfirmHalf] = useState(false);
   const [halfDayBlocked, setHalfDayBlocked] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // Number of saves in flight — drives the "Saving…" overlay.
+  const [savingCount, setSavingCount] = useState(0);
+  const isSaving = savingCount > 0;
 
   // Add-task picker state
   const [pickStep, setPickStep] = useState<"none" | "task" | "answer">("none");
@@ -75,19 +88,38 @@ export function TaskInputClient({
   const [customAnswer, setCustomAnswer] = useState("");
   const [pickedHours, setPickedHours] = useState(1);
 
-  // Ref always holds the latest dirty state so cleanup effects read current values.
-  const stateRef = useRef({ isDirty, selected, localDay });
-  useEffect(() => { stateRef.current = { isDirty, selected, localDay }; });
+  // Ref always holds the latest dirty/saving state so effects read current values.
+  const stateRef = useRef({ isDirty, selected, localDay, isSaving });
+  useEffect(() => { stateRef.current = { isDirty, selected, localDay, isSaving }; });
+
+  // Wraps an async save so the overlay shows while it is in flight.
+  const runSave = <T,>(op: () => Promise<T>): Promise<T> => {
+    setSavingCount((c) => c + 1);
+    return op().finally(() => setSavingCount((c) => c - 1));
+  };
 
   // Auto-save on unmount (soft navigation away from this page).
   useEffect(() => {
     return () => {
       const { isDirty: dirty, selected: sel, localDay: day } = stateRef.current;
       if (dirty) {
-        saveDay(userId, sel, day.halfDay, day.onLeave, day.entries);
+        saveDay(userId, sel, day.halfDay, day.onLeave, day.leaveType, day.entries);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Warn before closing/reloading the tab while a save is pending or in flight,
+  // so unsaved work isn't lost.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (stateRef.current.isDirty || stateRef.current.isSaving) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
   const holidayMap = useMemo(() => buildHolidayMap(initialData.holidays), [initialData.holidays]);
@@ -113,6 +145,10 @@ export function TaskInputClient({
   const isGraceWindow = isToday || isYesterday;
   const isLocked = isHoliday || isWeekend || isFuture;
   const isEditable = (isGraceWindow || isBackdateAllowed) && !isLocked;
+  // Leave may be revoked for today, upcoming days, or any past day the user has
+  // an explicit backdate grant for — never for other pre-today days (yesterday
+  // included, unless it too was granted).
+  const canRemoveLeave = selected >= today || isBackdateAllowed;
 
   const missingCount = useMemo(() => {
     let n = 0;
@@ -132,7 +168,7 @@ export function TaskInputClient({
     if (isDirty) {
       const snapshot = { ...localDay };
       const fromDate = selected;
-      saveDay(userId, fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.entries).then((result) => {
+      runSave(() => saveDay(userId, fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries)).then((result) => {
         if (result.success) {
           setServerMap((prev) => new Map(prev).set(fromDate, snapshot));
         } else {
@@ -141,7 +177,7 @@ export function TaskInputClient({
       });
     }
     setSelected(date);
-    setLocalDay(serverMap.get(date) ?? { halfDay: false, onLeave: false, entries: [] });
+    setLocalDay(serverMap.get(date) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] });
     setIsDirty(false);
     setPickStep("none");
     setPickedTaskId(null);
@@ -161,14 +197,98 @@ export function TaskInputClient({
     }
   };
   const confirmToggleHalf = () => {
-    modify((c) => ({ ...c, halfDay: !c.halfDay, onLeave: false }));
+    modify((c) => ({ ...c, halfDay: !c.halfDay, onLeave: false, leaveType: null }));
     setConfirmHalf(false);
   };
 
-  const handleToggleLeave = () => setConfirmLeave(true);
-  const confirmToggleLeave = () => {
-    modify((c) => ({ ...c, onLeave: !c.onLeave, halfDay: false }));
+  const handleToggleLeave = () => {
+    // Applying leave is fine; removing an existing backdated leave is not.
+    if (localDay.onLeave && !canRemoveLeave) {
+      toast.error("Backdated leave can't be removed.");
+      return;
+    }
+    setConfirmLeave(true);
+  };
+  const confirmToggleLeave = (leaveType: LeaveType | null) => {
+    modify((c) => {
+      const nextOnLeave = !c.onLeave;
+      return {
+        ...c,
+        onLeave: nextOnLeave,
+        halfDay: false,
+        leaveType: nextOnLeave ? leaveType : null,
+      };
+    });
     setConfirmLeave(false);
+  };
+
+  // Mark the given dates as earned leave in local state (after a range apply).
+  const markEarnedLeave = (dates: string[]) => {
+    setServerMap((prev) => {
+      const next = new Map(prev);
+      for (const d of dates) {
+        const ex = next.get(d) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] };
+        next.set(d, { ...ex, halfDay: false, onLeave: true, leaveType: "earned" as LeaveType });
+      }
+      return next;
+    });
+    if (dates.includes(selected)) {
+      setLocalDay((p) => ({ ...p, halfDay: false, onLeave: true, leaveType: "earned" }));
+      setIsDirty(false);
+    }
+  };
+
+  const handleLeaveConfirm = (result: LeaveConfirmResult) => {
+    if (result.action === "single") {
+      confirmToggleLeave(result.leaveType);
+      return;
+    }
+
+    if (result.action === "remove") {
+      // Editable day: use the local toggle so preserved entries are restored.
+      if (isEditable) {
+        confirmToggleLeave(null);
+        return;
+      }
+      // Upcoming (non-editable) leave day: revoke this date directly.
+      const date = selected;
+      setConfirmLeave(false);
+      runSave(() => revokeLeaveDate(userId, date)).then((res) => {
+        if (!res.success) {
+          toast.error(res.message);
+          return;
+        }
+        setServerMap((prev) => {
+          const next = new Map(prev);
+          const ex = next.get(date);
+          if (ex) {
+            const cleared = { ...ex, halfDay: false, onLeave: false, leaveType: null };
+            if (cleared.entries.length === 0) next.delete(date);
+            else next.set(date, cleared);
+          }
+          return next;
+        });
+        setLocalDay((p) => ({ ...p, onLeave: false, leaveType: null }));
+        setIsDirty(false);
+        toast.success("Leave revoked for this day.");
+      });
+      return;
+    }
+
+    // Earned-leave range: one record per working day.
+    setConfirmLeave(false);
+    runSave(() => applyEarnedLeave(userId, result.from, result.to)).then((res) => {
+      if (!res.success) {
+        toast.error(res.message);
+        return;
+      }
+      markEarnedLeave(res.dates);
+      toast.success(
+        res.dates.length === 1
+          ? "Earned leave applied."
+          : `Earned leave applied for ${res.dates.length} days.`,
+      );
+    });
   };
 
   const handleConfirmAdd = () => {
@@ -216,6 +336,24 @@ export function TaskInputClient({
 
   return (
     <>
+      {/* ── Autosave overlay ── */}
+      {isSaving && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-black/30 backdrop-blur-[2px] animate-in fade-in duration-150"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex items-center gap-3 rounded-2xl bg-card border border-border px-5 py-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.4)]">
+            <Loader2 className="h-5 w-5 animate-spin text-brand" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">Saving your changes…</div>
+              <div className="text-[11.5px] text-muted-foreground">Please don&apos;t close this page.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="relative isolate flex flex-wrap items-end justify-between gap-4 mb-6">
         <HeaderGlow />
@@ -337,10 +475,14 @@ export function TaskInputClient({
             </div>
           </Card>
 
-          {isLocked ? (
+          {localDay.onLeave && !isHoliday && !isWeekend ? (
+            <LeaveActiveCard
+              active={selected >= today}
+              leaveType={localDay.leaveType}
+              onRemove={canRemoveLeave ? handleToggleLeave : undefined}
+            />
+          ) : isLocked ? (
             <LockedNotice holidayName={holidayMap.get(selected)} isFuture={isFuture} />
-          ) : localDay.onLeave ? (
-            <LeaveActiveCard isEditable={isEditable} onToggle={handleToggleLeave} />
           ) : (
             <>
               {/* Progress */}
@@ -474,11 +616,13 @@ export function TaskInputClient({
         />
       )}
 
-      {confirmLeave && isEditable && (
+      {confirmLeave && (
         <LeaveConfirmModal
           removing={localDay.onLeave}
           hasEntries={localDay.entries.length > 0}
-          onConfirm={confirmToggleLeave}
+          selected={selected}
+          yesterday={yesterday}
+          onConfirm={handleLeaveConfirm}
           onCancel={() => setConfirmLeave(false)}
         />
       )}
@@ -516,19 +660,105 @@ function Toggle({ on, onChange, activeClass = "bg-amber-500" }: { on: boolean; o
   );
 }
 
+// ─── Leave date picker (shared Calendar in a popover) ─────────────────────────
+
+function fmtShortDate(s: string): string {
+  return parseISO(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function LeaveDatePicker({
+  value,
+  min,
+  onChange,
+}: {
+  value: string;
+  min?: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = value ? parseISO(value) : undefined;
+  const minDate = min ? parseISO(min) : undefined;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="w-full flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-left transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/30"
+        >
+          <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className={cn("flex-1 truncate", value ? "text-foreground font-medium" : "text-muted-foreground")}>
+            {value ? fmtShortDate(value) : "Pick a date"}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          defaultMonth={selectedDate ?? minDate}
+          disabled={minDate ? { before: minDate } : undefined}
+          onSelect={(d) => {
+            if (d) {
+              onChange(toDateStr(d));
+              setOpen(false);
+            }
+          }}
+          autoFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ─── Leave confirm modal ──────────────────────────────────────────────────────
+
+type LeaveConfirmResult =
+  | { action: "remove" }
+  | { action: "single"; leaveType: LeaveType }
+  | { action: "range"; from: string; to: string };
 
 function LeaveConfirmModal({
   removing,
   hasEntries,
+  selected,
+  yesterday,
   onConfirm,
   onCancel,
 }: {
   removing: boolean;
   hasEntries: boolean;
-  onConfirm: () => void;
+  selected: string;
+  yesterday: string;
+  onConfirm: (result: LeaveConfirmResult) => void;
   onCancel: () => void;
 }) {
+  const [leaveType, setLeaveType] = useState<LeaveType | null>(null);
+  // Earned leave can span multiple days — but only within the grace window
+  // (today/yesterday) and forward. A backdated (granted) day only ever covers
+  // itself, so a range can't spill onto ungranted past dates.
+  const allowRange = selected >= yesterday;
+  const [fromDate, setFromDate] = useState(selected);
+  const [toDate, setToDate] = useState(selected);
+  const isEarned = leaveType === "earned";
+  const rangeValid = !isEarned || !allowRange || (!!fromDate && !!toDate && toDate >= fromDate);
+  const canConfirm = removing || (leaveType !== null && rangeValid);
+
+  const handleConfirm = () => {
+    if (removing) return onConfirm({ action: "remove" });
+    if (!leaveType) return;
+    if (leaveType === "earned") {
+      // On a backdated granted day, earned leave applies to that single day.
+      return allowRange
+        ? onConfirm({ action: "range", from: fromDate, to: toDate })
+        : onConfirm({ action: "range", from: selected, to: selected });
+    }
+    onConfirm({ action: "single", leaveType });
+  };
+
+  // Range can only start from the selected (grace-window) day onward.
+  const minDate = selected;
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm p-5"
@@ -555,13 +785,84 @@ function LeaveConfirmModal({
               <p className="text-[13px] text-muted-foreground mt-0.5">
                 {removing
                   ? "This day will return to normal. You'll need to log tasks."
-                  : "No tasks will be required for this day."}
+                  : "Choose the type of leave for this day."}
               </p>
             </div>
           </div>
 
-          {!removing && hasEntries && (
-            <div className="rounded-xl bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-800 px-4 py-3 text-[12.5px] text-sky-700 dark:text-sky-400">
+          {!removing && (
+            <div className="flex flex-col gap-2 mb-1">
+              {LEAVE_TYPE_OPTIONS.map((opt) => {
+                const active = leaveType === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setLeaveType(opt.value)}
+                    className={cn(
+                      "flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-left transition-colors",
+                      active
+                        ? "bg-sky-50 dark:bg-sky-950/30 border-sky-300 dark:border-sky-700"
+                        : "bg-muted border-border hover:border-foreground/20",
+                    )}
+                  >
+                    <span className={cn(
+                      "h-4 w-4 rounded-full border-2 grid place-items-center shrink-0",
+                      active ? "border-sky-500" : "border-muted-foreground/40",
+                    )}>
+                      {active && <span className="h-2 w-2 rounded-full bg-sky-500" />}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className={cn("block text-sm font-semibold", active ? "text-sky-700 dark:text-sky-400" : "text-foreground")}>
+                        {opt.label}
+                      </span>
+                      <span className="block text-[11.5px] text-muted-foreground">{opt.hint}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Earned leave on a backdated (granted) day covers just that day. */}
+          {!removing && isEarned && !allowRange && (
+            <div className="mt-3 rounded-xl bg-muted/60 border border-border px-3.5 py-3 text-[11.5px] text-muted-foreground">
+              Earned leave will be applied to this day only. Ranges are available from today.
+            </div>
+          )}
+
+          {/* Earned leave: pick a date range — each working day is stored separately. */}
+          {!removing && isEarned && allowRange && (
+            <div className="mt-3 rounded-xl bg-muted/60 border border-border px-3.5 py-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">From</span>
+                  <LeaveDatePicker
+                    value={fromDate}
+                    min={minDate}
+                    onChange={(v) => {
+                      setFromDate(v);
+                      if (toDate < v) setToDate(v);
+                    }}
+                  />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">To</span>
+                  <LeaveDatePicker
+                    value={toDate}
+                    min={fromDate || minDate}
+                    onChange={setToDate}
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-[11.5px] text-muted-foreground">
+                Sundays and holidays are skipped. Each day can be revoked individually later.
+              </p>
+            </div>
+          )}
+
+          {!removing && hasEntries && !isEarned && (
+            <div className="mt-3 rounded-xl bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-800 px-4 py-3 text-[12.5px] text-sky-700 dark:text-sky-400">
               Your logged tasks will be preserved and restored if you remove leave later.
             </div>
           )}
@@ -572,9 +873,10 @@ function LeaveConfirmModal({
             Cancel
           </Button>
           <Button
-            onClick={onConfirm}
+            onClick={handleConfirm}
+            disabled={!canConfirm}
             className={cn(
-              "rounded-full gap-2 h-auto py-2 px-5",
+              "rounded-full gap-2 h-auto py-2 px-5 disabled:opacity-45 disabled:cursor-not-allowed",
               removing
                 ? "bg-muted text-foreground hover:bg-muted hover:brightness-95 border border-border"
                 : "bg-sky-500 text-white hover:bg-sky-500 hover:brightness-105",

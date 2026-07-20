@@ -12,10 +12,17 @@ import {
 import { cn } from "@/src/lib/utils";
 import { Card, CardContent } from "@/src/components/ui/card";
 import type { PersonalDashboardData } from "../actions";
+import type { LeaveType } from "@/src/app/(admin)/tasks/leave";
 import type { SessionUser } from "@/src/lib/session";
 import { CardHead, StatusPill } from "./dashboard-ui";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
+  casual: "Casual leave",
+  earned: "Earned leave",
+  unpaid: "Unpaid leave",
+};
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -67,7 +74,7 @@ export function PersonalSection({
   showGreeting?: boolean;
 }) {
   const {
-    today, dailyTarget, todayHalfDay, todayOnLeave, currentSchedule, upcomingHolidays,
+    today, dailyTarget, todayHalfDay, todayOnLeave, todayLeaveType, currentSchedule, upcomingHolidays,
     todayTasks, todayTotal, weekData, weekTotal,
     monthLogged, monthTarget, streak,
   } = data;
@@ -131,7 +138,7 @@ export function PersonalSection({
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <TodayProgressCard todayTasks={todayTasks} todayTotal={todayTotal} dailyTarget={dailyTarget} halfDay={todayHalfDay} onLeave={todayOnLeave} today={today} />
+          <TodayProgressCard todayTasks={todayTasks} todayTotal={todayTotal} dailyTarget={dailyTarget} halfDay={todayHalfDay} onLeave={todayOnLeave} leaveType={todayLeaveType} today={today} />
           <WeekCard weekData={weekData} weekTotal={weekTotal} dailyTarget={dailyTarget} />
         </div>
         <div className="flex flex-col gap-6">
@@ -147,10 +154,11 @@ export function PersonalSection({
 // ─── Today's Progress Card ────────────────────────────────────────────────────
 
 function TodayProgressCard({
-  todayTasks, todayTotal, dailyTarget, halfDay, onLeave, today,
+  todayTasks, todayTotal, dailyTarget, halfDay, onLeave, leaveType, today,
 }: Pick<PersonalDashboardData, "todayTasks" | "todayTotal" | "dailyTarget" | "today"> & {
   halfDay: boolean;
   onLeave: boolean;
+  leaveType: PersonalDashboardData["todayLeaveType"];
 }) {
   // Half-day halves the target; on-leave days require no logging.
   const target = halfDay ? dailyTarget / 2 : dailyTarget;
@@ -161,8 +169,9 @@ function TodayProgressCard({
     weekday: "long", month: "long", day: "numeric",
   });
 
+  const leaveLabel = leaveType ? LEAVE_TYPE_LABEL[leaveType] : "On leave";
   const caption = onLeave
-    ? `On leave · ${dateLabel}`
+    ? `${leaveLabel} · ${dateLabel}`
     : `${halfDay ? "Half-day target" : "Daily target"} ${fmtHrs(target)} · ${dateLabel}`;
 
   return (
@@ -174,7 +183,7 @@ function TodayProgressCard({
           description={caption}
           right={
             onLeave
-              ? <StatusPill tone="muted">On leave</StatusPill>
+              ? <StatusPill tone="muted">{leaveLabel}</StatusPill>
               : halfDay
                 ? <StatusPill tone="active"><span className="text-[11px] font-extrabold leading-none">½</span>Half day</StatusPill>
                 : done
@@ -186,7 +195,7 @@ function TodayProgressCard({
       <CardContent className="py-6">
         {onLeave ? (
           <div className="rounded-2xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/20 px-6 py-8 text-center">
-            <div className="text-base font-bold text-sky-700 dark:text-sky-400">On leave today</div>
+            <div className="text-base font-bold text-sky-700 dark:text-sky-400">{leaveLabel} today</div>
             <p className="mt-1.5 text-sm text-muted-foreground">No tasks are required for this day.</p>
           </div>
         ) : (
