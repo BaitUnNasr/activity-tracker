@@ -4,13 +4,13 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Lock, Mail, Loader2 } from "lucide-react";
+import { ArrowRight, Hash, Lock, Loader2 } from "lucide-react";
 
 import { cn } from "@/src/lib/utils";
 import { AlertDestructive } from "@/src/components/alerts/alertDestructive";
 
 type LoginType = {
-  email: string;
+  employeeCode: string;
   password: string;
 };
 
@@ -29,7 +29,7 @@ export function LoginForm({ className }: { className?: string }) {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginType) => {
-      const res = await fetch("/api/auth/sign-in/email", {
+      const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...data, rememberMe }),
@@ -74,36 +74,35 @@ export function LoginForm({ className }: { className?: string }) {
 
       {/* Fields */}
       <div className="mt-1 flex flex-col gap-3">
-        {/* Email */}
+        {/* Employee code */}
         <div className="flex flex-col gap-1.5">
           <label
-            htmlFor="email"
+            htmlFor="employeeCode"
             className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground"
           >
-            Email
+            Employee Code
           </label>
           <div className="relative">
-            <Mail className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Hash className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
-              id="email"
-              type="email"
-              placeholder="you@company.com"
+              id="employeeCode"
+              type="text"
+              inputMode="text"
+              autoCapitalize="characters"
+              autoComplete="username"
+              placeholder="e.g. EMP001"
               disabled={isLoading}
               className={cn(
                 "h-12 w-full rounded-xl border-0 bg-muted pl-10 pr-4 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-brand focus:ring-offset-0 disabled:opacity-50",
-                errors.email && "ring-2 ring-destructive",
+                errors.employeeCode && "ring-2 ring-destructive",
               )}
-              {...register("email", {
-                required: "Email address is required",
-                pattern: {
-                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                  message: "Enter a valid email address",
-                },
+              {...register("employeeCode", {
+                required: "Employee code is required",
               })}
             />
           </div>
-          {errors.email && (
-            <p className="text-xs text-destructive">{errors.email.message}</p>
+          {errors.employeeCode && (
+            <p className="text-xs text-destructive">{errors.employeeCode.message}</p>
           )}
         </div>
 

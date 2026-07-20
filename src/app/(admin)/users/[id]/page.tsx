@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
-import { Activity, ArrowLeft, BadgeCheck, Briefcase, Building2, Mail, User } from "lucide-react";
+import { Activity, ArrowLeft, BadgeCheck, Briefcase, Building2, User } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
 import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
@@ -42,7 +42,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       .select({
         id: userTable.id,
         name: userTable.name,
-        email: userTable.email,
         employeeCode: userTable.employeeCode,
         type: userTable.type,
         isActive: userTable.isActive,
@@ -182,7 +181,6 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             <CardContent>
               <div className="divide-y divide-border">
                 <InfoRow icon={User}       label="Full Name"   value={userData.name} />
-                <InfoRow icon={Mail}       label="Email"       value={userData.email} />
                 <InfoRow icon={Briefcase}  label="Type"        value={typeLabel} />
 
                 <InfoRow icon={Building2}  label="Branch"      value={currentBranch?.name ?? "—"} />

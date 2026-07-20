@@ -166,7 +166,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
                     {user?.name ?? "—"}
                   </p>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {user?.email ?? "—"}
+                    {user?.employeeCode ? `# ${user.employeeCode}` : "—"}
                   </p>
                 </div>
 
@@ -224,7 +224,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
                 {user?.name ?? "—"}
               </DrawerTitle>
               <p className="text-xs text-muted-foreground truncate mt-0.5">
-                {user?.email ?? "—"}
+                {user?.employeeCode ? `# ${user.employeeCode}` : "—"}
               </p>
             </div>
           </div>

@@ -50,7 +50,7 @@ const columns: ColumnDef<UserRow>[] = [
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => {
-      const { id, name, email } = row.original;
+      const { id, name } = row.original;
       const initials = name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
       return (
         <Link
@@ -66,9 +66,6 @@ const columns: ColumnDef<UserRow>[] = [
           <div className="min-w-0">
             <div className="font-medium underline group-hover:font-bold text-foreground truncate transition-all">
               {name}
-            </div>
-            <div className="text-xs text-muted-foreground truncate">
-              {email}
             </div>
           </div>
         </Link>
@@ -163,8 +160,8 @@ export function UsersTable({ rows, canAddUser, designations, branches }: Props) 
     onPaginationChange: setPagination,
     globalFilterFn: (row, _columnId, filterValue) => {
       const q = String(filterValue).toLowerCase();
-      const { name, email, employeeCode, designation, branch } = row.original;
-      return [name, email, employeeCode, designation ?? "", branch ?? ""].some((v) =>
+      const { name, employeeCode, designation, branch } = row.original;
+      return [name, employeeCode, designation ?? "", branch ?? ""].some((v) =>
         v.toLowerCase().includes(q),
       );
     },

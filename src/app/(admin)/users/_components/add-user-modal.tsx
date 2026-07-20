@@ -28,7 +28,6 @@ type Props = {
 
 type FormState = {
   name: string;
-  email: string;
   password: string;
   employeeCode: string;
   type: "F" | "T";
@@ -41,11 +40,9 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
   const [isPending, startTransition] = useTransition();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
     name: "",
-    email: "",
     password: "",
     employeeCode: "",
     type: "F",
@@ -58,7 +55,6 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
 
   const isValid =
     form.name.trim() &&
-    form.email.trim() &&
     form.password.length >= 8 &&
     form.employeeCode.trim() &&
     form.designationId &&
@@ -68,12 +64,10 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
     e.preventDefault();
     if (!isValid || isPending) return;
     setError(null);
-    setEmailError(null);
 
     startTransition(async () => {
       const result = await createUser({
         name: form.name.trim(),
-        email: form.email.trim(),
         password: form.password,
         employeeCode: form.employeeCode.trim(),
         type: form.type,
@@ -85,8 +79,6 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
         toast.success("User created successfully.");
         router.refresh();
         onClose();
-      } else if (result.field === "email") {
-        setEmailError(result.message);
       } else {
         setError(result.message);
       }
@@ -138,16 +130,6 @@ export function AddUserModal({ onClose, designations, branches }: Props) {
                 value={form.employeeCode}
                 onChange={(e) => set("employeeCode", e.target.value)}
                 placeholder="EMP001"
-              />
-            </Field>
-
-            <Field label="Email" error={emailError ?? undefined}>
-              <input
-                type="email"
-                className={INPUT}
-                value={form.email}
-                onChange={(e) => { set("email", e.target.value); setEmailError(null); }}
-                placeholder="john@company.com"
               />
             </Field>
 

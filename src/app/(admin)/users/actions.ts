@@ -102,7 +102,6 @@ export async function fetchUsersPageData(): Promise<UsersPageData> {
 
 export type CreateUserInput = {
   name: string;
-  email: string;
   password: string;
   employeeCode: string;
   type: "F" | "T";
@@ -114,20 +113,41 @@ export type ActionResult =
   | { success: true }
   | { success: false; message: string; field?: string };
 
+// Emails are not collected from users — this app authenticates by employee code.
+// A stable internal address is derived from the person's name + employee code.
+const USER_EMAIL_DOMAIN = "pulse.local";
+
+function slugifyForEmail(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 40);
+}
+
+function generateUserEmail(name: string, employeeCode: string): string {
+  const namePart = slugifyForEmail(name) || "user";
+  const codePart = slugifyForEmail(employeeCode) || "0";
+  return `${namePart}.${codePart}@${USER_EMAIL_DOMAIN}`;
+}
+
 export async function createUser(input: CreateUserInput): Promise<ActionResult> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return { success: false, message: "Unauthorized" };
 
-  const { name, email, password, employeeCode, type, designationId, branchId } = input;
+  const { name, password, employeeCode, type, designationId, branchId } = input;
+
+  // Derived, not user-supplied.
+  const email = generateUserEmail(name, employeeCode);
 
   const existing = await db
     .select({ id: user.id })
     .from(user)
-    .where(eq(user.email, email.toLowerCase()))
+    .where(eq(user.email, email))
     .limit(1);
 
   if (existing.length > 0) {
-    return { success: false, message: "Email is already registered", field: "email" };
+    return {
+      success: false,
+      message: "A user with the same name and employee code already exists",
+      field: "employeeCode",
+    };
   }
 
   const userId = randomUUID();
