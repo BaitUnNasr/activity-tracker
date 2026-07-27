@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/src/db/client";
-import { branchMaster, taskAnswerOption, taskMaster } from "@/src/db/schema";
+import { branchMaster, taskAnswerOption, taskCategory, taskMaster } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
 
-export type AnswerOption = {
+export type SubCategory = {
   id: number;
   label: string;
   sortOrder: number;
@@ -14,20 +14,32 @@ export type AnswerOption = {
   branches: string[] | null;
 };
 
+export type Category = {
+  id: number;
+  name: string;
+  sortOrder: number;
+  designations: string[] | null;
+  branches: string[] | null;
+  subcategories: SubCategory[];
+};
+
 export type TaskRow = {
   id: number;
   name: string;
   isActive: boolean;
-  answers: AnswerOption[];
+  categories: Category[];
 };
 
 export type ActionResult =
   | { success: true }
   | { success: false; message: string };
 
+const norm = (v: string[] | null | undefined) => (v?.length ? v : null);
+
 export async function fetchTasks(): Promise<TaskRow[]> {
-  const [tasks, answers] = await Promise.all([
+  const [tasks, categories, subs] = await Promise.all([
     db.select().from(taskMaster).orderBy(asc(taskMaster.id)),
+    db.select().from(taskCategory).orderBy(asc(taskCategory.sortOrder), asc(taskCategory.id)),
     db.select().from(taskAnswerOption).orderBy(asc(taskAnswerOption.sortOrder), asc(taskAnswerOption.id)),
   ]);
 
@@ -35,9 +47,24 @@ export async function fetchTasks(): Promise<TaskRow[]> {
     id: t.id,
     name: t.name,
     isActive: t.isActive,
-    answers: answers
-      .filter((a) => a.taskId === t.id)
-      .map((a) => ({ id: a.id, label: a.label, sortOrder: a.sortOrder, designations: a.designations ?? null, branches: a.branches ?? null })),
+    categories: categories
+      .filter((c) => c.taskId === t.id)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        sortOrder: c.sortOrder,
+        designations: c.designations ?? null,
+        branches: c.branches ?? null,
+        subcategories: subs
+          .filter((s) => s.categoryId === c.id)
+          .map((s) => ({
+            id: s.id,
+            label: s.label,
+            sortOrder: s.sortOrder,
+            designations: s.designations ?? null,
+            branches: s.branches ?? null,
+          })),
+      })),
   }));
 }
 
@@ -49,6 +76,8 @@ export async function fetchBranchNames(): Promise<string[]> {
     .orderBy(asc(branchMaster.name));
   return branches.map((b) => b.name);
 }
+
+// ─── Task ───────────────────────────────────────────────────────────────────
 
 export async function createTask(name: string): Promise<ActionResult> {
   try {
@@ -72,6 +101,7 @@ export async function updateTask(id: number, name: string): Promise<ActionResult
 
 export async function deleteTask(id: number): Promise<ActionResult> {
   try {
+    // FK ON DELETE CASCADE removes categories → subcategories.
     await db.delete(taskMaster).where(eq(taskMaster.id, id));
     revalidatePath("/task-master");
     return { success: true };
@@ -80,15 +110,16 @@ export async function deleteTask(id: number): Promise<ActionResult> {
   }
 }
 
-export async function createAnswerOption(taskId: number, label: string, designations: string[] | null = null, branches: string[] | null = null): Promise<ActionResult> {
+// ─── Category ─────────────────────────────────────────────────────────────────
+
+export async function createCategory(
+  taskId: number,
+  name: string,
+  designations: string[] | null = null,
+  branches: string[] | null = null,
+): Promise<ActionResult> {
   try {
-    await db.insert(taskAnswerOption).values({
-      taskId,
-      label: label.trim(),
-      sortOrder: 0,
-      designations: designations?.length ? designations : null,
-      branches: branches?.length ? branches : null,
-    });
+    await db.insert(taskCategory).values({ taskId, name: name.trim(), sortOrder: 0, designations: norm(designations), branches: norm(branches) });
     revalidatePath("/task-master");
     return { success: true };
   } catch (err) {
@@ -96,16 +127,14 @@ export async function createAnswerOption(taskId: number, label: string, designat
   }
 }
 
-export async function updateAnswerOption(id: number, label: string, designations: string[] | null = null, branches: string[] | null = null): Promise<ActionResult> {
+export async function updateCategory(
+  id: number,
+  name: string,
+  designations: string[] | null = null,
+  branches: string[] | null = null,
+): Promise<ActionResult> {
   try {
-    await db
-      .update(taskAnswerOption)
-      .set({
-        label: label.trim(),
-        designations: designations?.length ? designations : null,
-        branches: branches?.length ? branches : null,
-      })
-      .where(eq(taskAnswerOption.id, id));
+    await db.update(taskCategory).set({ name: name.trim(), designations: norm(designations), branches: norm(branches) }).where(eq(taskCategory.id, id));
     revalidatePath("/task-master");
     return { success: true };
   } catch (err) {
@@ -113,7 +142,50 @@ export async function updateAnswerOption(id: number, label: string, designations
   }
 }
 
-export async function deleteAnswerOption(id: number): Promise<ActionResult> {
+export async function deleteCategory(id: number): Promise<ActionResult> {
+  try {
+    // FK ON DELETE CASCADE removes its subcategories.
+    await db.delete(taskCategory).where(eq(taskCategory.id, id));
+    revalidatePath("/task-master");
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: getErrorMessage(err) };
+  }
+}
+
+// ─── Subcategory ──────────────────────────────────────────────────────────────
+
+export async function createSubcategory(
+  categoryId: number,
+  label: string,
+  designations: string[] | null = null,
+  branches: string[] | null = null,
+): Promise<ActionResult> {
+  try {
+    await db.insert(taskAnswerOption).values({ categoryId, label: label.trim(), sortOrder: 0, designations: norm(designations), branches: norm(branches) });
+    revalidatePath("/task-master");
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: getErrorMessage(err) };
+  }
+}
+
+export async function updateSubcategory(
+  id: number,
+  label: string,
+  designations: string[] | null = null,
+  branches: string[] | null = null,
+): Promise<ActionResult> {
+  try {
+    await db.update(taskAnswerOption).set({ label: label.trim(), designations: norm(designations), branches: norm(branches) }).where(eq(taskAnswerOption.id, id));
+    revalidatePath("/task-master");
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: getErrorMessage(err) };
+  }
+}
+
+export async function deleteSubcategory(id: number): Promise<ActionResult> {
   try {
     await db.delete(taskAnswerOption).where(eq(taskAnswerOption.id, id));
     revalidatePath("/task-master");

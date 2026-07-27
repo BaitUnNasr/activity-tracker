@@ -9,6 +9,7 @@ import {
   holidayMaster,
   scheduleMaster,
   taskAnswerOption,
+  taskCategory,
   taskDayMeta,
   taskEntry,
   taskMaster,
@@ -17,15 +18,19 @@ import { LEAVE_TYPES, type LeaveType } from "./leave";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type SubCategoryForPicker = { id: number; label: string };
+export type CategoryForPicker = { id: number; name: string; subcategories: SubCategoryForPicker[] };
+
 export type TaskForPicker = {
   id: number;
   name: string;
-  answers: { id: number; label: string }[];
+  categories: CategoryForPicker[];
 };
 
 export type EntryRow = {
   date: string;
   taskId: number;
+  category: string;
   answer: string;
   hours: number;
 };
@@ -62,9 +67,10 @@ export async function fetchTasksPageData(
   userType: "F" | "T",
   today: string,
 ): Promise<TasksPageData> {
-  const [allTasks, allAnswers, holidays, schedules, entriesRaw, dayMetasRaw, backdateRaw] =
+  const [allTasks, allCategories, allSubs, holidays, schedules, entriesRaw, dayMetasRaw, backdateRaw] =
     await Promise.all([
       db.select().from(taskMaster).where(eq(taskMaster.isActive, true)).orderBy(asc(taskMaster.id)),
+      db.select().from(taskCategory).orderBy(asc(taskCategory.sortOrder), asc(taskCategory.id)),
       db.select().from(taskAnswerOption).orderBy(asc(taskAnswerOption.sortOrder), asc(taskAnswerOption.id)),
       db.select({
         name: holidayMaster.name,
@@ -77,26 +83,33 @@ export async function fetchTasksPageData(
       db.select({ date: backdatePermission.date }).from(backdatePermission).where(eq(backdatePermission.userId, userId)),
     ]);
 
-  // Filter answer options by the user's current designation and branch
-  const visibleAnswers = allAnswers.filter((a) => {
-    const designationOk =
-      !a.designations ||
-      a.designations.length === 0 ||
-      (designation !== null && a.designations.includes(designation));
-    const branchOk =
-      !a.branches ||
-      a.branches.length === 0 ||
-      (branch !== null && a.branches.includes(branch));
+  // A restriction allows the user when its designation and branch lists each
+  // either cover the user or are unset (all). Both category and subcategory
+  // must allow for a subcategory to be visible.
+  const allows = (r: { designations: string[] | null; branches: string[] | null }) => {
+    const designationOk = !r.designations?.length || (designation !== null && r.designations.includes(designation));
+    const branchOk = !r.branches?.length || (branch !== null && r.branches.includes(branch));
     return designationOk && branchOk;
-  });
+  };
 
-  const tasks: TaskForPicker[] = allTasks.map((t) => ({
-    id: t.id,
-    name: t.name,
-    answers: visibleAnswers
-      .filter((a) => a.taskId === t.id)
-      .map((a) => ({ id: a.id, label: a.label })),
-  }));
+  const visibleCategories = allCategories.filter(allows);
+
+  const tasks: TaskForPicker[] = allTasks
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      categories: visibleCategories
+        .filter((c) => c.taskId === t.id)
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          subcategories: allSubs
+            .filter((s) => s.categoryId === c.id && allows(s))
+            .map((s) => ({ id: s.id, label: s.label })),
+        }))
+        .filter((c) => c.subcategories.length > 0),
+    }))
+    .filter((t) => t.categories.length > 0);
 
   // Daily target from the schedule that covers today (null end = open-ended)
   const activeSchedule = schedules.find(
@@ -115,6 +128,7 @@ export async function fetchTasksPageData(
     entries: entriesRaw.map((e) => ({
       date: e.date,
       taskId: e.taskId,
+      category: e.category ?? "",
       answer: e.answer,
       hours: e.hours,
     })),
@@ -140,7 +154,7 @@ export async function saveDay(
   halfDay: boolean,
   onLeave: boolean,
   leaveType: LeaveType | null,
-  entries: { taskId: number; answer: string; hours: number }[],
+  entries: { taskId: number; category: string; answer: string; hours: number }[],
 ): Promise<SaveDayResult> {
   if (onLeave && !LEAVE_TYPES.includes(leaveType as LeaveType)) {
     return { success: false, message: "Please choose a leave type" };
@@ -172,6 +186,7 @@ export async function saveDay(
             userId,
             date,
             taskId: e.taskId,
+            category: e.category || null,
             answer: e.answer,
             hours: e.hours,
           })),

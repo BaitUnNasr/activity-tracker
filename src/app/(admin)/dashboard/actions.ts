@@ -347,12 +347,17 @@ export async function fetchPersonalDashboardData(
   // Upcoming holidays (endDate >= today)
   const upcomingHolidays = allHolidays.filter((h) => h.endDate >= today);
 
-  // Today's tasks
+  // Today's tasks — a task may hold several activities, so sum hours per task
+  // for the dashboard summary (one row/segment per task).
   const taskMap = new Map(taskMasters.map((t) => [t.id, t.name]));
-  const todayTasks = todayEntriesRaw.map((e) => ({
-    taskId: e.taskId,
-    name: taskMap.get(e.taskId) ?? "Unknown",
-    hours: e.hours,
+  const todayByTask = new Map<number, number>();
+  for (const e of todayEntriesRaw) {
+    todayByTask.set(e.taskId, (todayByTask.get(e.taskId) ?? 0) + e.hours);
+  }
+  const todayTasks = [...todayByTask.entries()].map(([taskId, hours]) => ({
+    taskId,
+    name: taskMap.get(taskId) ?? "Unknown",
+    hours,
   }));
   const todayTotal = todayTasks.reduce((s, t) => s + t.hours, 0);
 

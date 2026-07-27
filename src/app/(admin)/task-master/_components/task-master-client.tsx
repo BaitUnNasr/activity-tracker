@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -8,8 +8,10 @@ import {
   Check,
   ChevronRight,
   ClipboardList,
+  FolderTree,
   Pencil,
   Plus,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -26,6 +28,8 @@ import {
   CardTitle,
 } from "@/src/components/ui/card";
 import { Badge } from "@/src/components/ui/badge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/src/components/ui/accordion";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/src/components/ui/select";
 import {
   Empty,
   EmptyDescription,
@@ -35,14 +39,18 @@ import {
 } from "@/src/components/ui/empty";
 import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import {
-  createAnswerOption,
+  createCategory,
+  createSubcategory,
   createTask,
-  deleteAnswerOption,
+  deleteCategory,
+  deleteSubcategory,
   deleteTask,
-  updateAnswerOption,
+  updateCategory,
+  updateSubcategory,
   updateTask,
+  type Category,
+  type SubCategory,
   type TaskRow,
-  type AnswerOption,
 } from "../actions";
 
 const DESIGNATION_META = [
@@ -51,16 +59,28 @@ const DESIGNATION_META = [
   { name: "Supervisor", chip: "bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400",    dot: "bg-purple-500" },
   { name: "General",    chip: "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
 ] as const;
+const DESIGNATIONS = DESIGNATION_META.map((d) => d.name);
 
-function getDesignationColors(name: string) {
+const BRANCH_CHIP = { chip: "bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400", dot: "bg-teal-500" } as const;
+
+function designationChip(name: string) {
   return DESIGNATION_META.find((d) => d.name === name);
 }
 
-// Branches are dynamic (from branch_master), so they share one chip style.
-const BRANCH_CHIP = {
-  chip: "bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400",
-  dot: "bg-teal-500",
-} as const;
+type Restr = { designations: string[] | null; branches: string[] | null };
+// Would a user with the given designation/branch see this restricted item?
+// Empty filter dimension = "any".
+function allows(r: Restr, desig: string, branch: string): boolean {
+  const dOk = !desig || !r.designations?.length || r.designations.includes(desig);
+  const bOk = !branch || !r.branches?.length || r.branches.includes(branch);
+  return dOk && bOk;
+}
+
+// ─── Modal target types ───────────────────────────────────────────────────────
+
+type CatModal = { mode: "add"; taskId: number } | { mode: "edit"; taskId: number; category: Category };
+type SubModal = { mode: "add"; categoryId: number } | { mode: "edit"; categoryId: number; sub: SubCategory };
+type PendingDelete = { kind: "task" | "category" | "subcategory"; id: number; name: string };
 
 // ─── Main Client ──────────────────────────────────────────────────────────────
 
@@ -68,136 +88,44 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const [tasks, setTasks] = useState<TaskRow[]>(initialTasks);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(initialTasks[0]?.id ?? null);
   const [showAddTask, setShowAddTask] = useState(false);
-  const [showAddAnswer, setShowAddAnswer] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [removingTaskId, setRemovingTaskId] = useState<number | null>(null);
-  const [removingAnswerId, setRemovingAnswerId] = useState<number | null>(null);
-  const [pendingDeleteTask, setPendingDeleteTask] = useState<{ id: number; name: string } | null>(null);
-  const [pendingDeleteAnswer, setPendingDeleteAnswer] = useState<{ id: number; label: string } | null>(null);
-  const [pendingEditAnswer, setPendingEditAnswer] = useState<AnswerOption | null>(null);
 
-  useEffect(() => { setTasks(initialTasks); }, [initialTasks]);
+  const [catModal, setCatModal] = useState<CatModal | null>(null);
+  const [subModal, setSubModal] = useState<SubModal | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+  const refresh = () => startTransition(() => router.refresh());
 
-  const handleAddTask = (name: string) => {
-    setShowAddTask(false);
-    toast.success("Task added.");
-    router.refresh();
+  const selectedTask = initialTasks.find((t) => t.id === selectedTaskId) ?? null;
+
+  const run = async (op: () => Promise<{ success: boolean; message?: string }>, ok: string) => {
+    const res = await op();
+    if (res.success) { toast.success(ok); refresh(); }
+    else toast.error(res.message ?? "Something went wrong");
   };
 
-  const handleStartEdit = (task: TaskRow) => {
-    setEditingTaskId(task.id);
-    setEditingName(task.name);
-  };
-
-  const handleSaveEdit = () => {
+  const handleSaveRename = () => {
     if (!editingTaskId || !editingName.trim()) { setEditingTaskId(null); return; }
-    const id = editingTaskId;
-    const name = editingName.trim();
+    const id = editingTaskId, name = editingName.trim();
     setEditingTaskId(null);
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)));
-    startTransition(async () => {
-      const result = await updateTask(id, name);
-      if (!result.success) {
-        toast.error(result.message ?? "Failed to rename task");
-        router.refresh();
-      } else {
-        toast.success("Task renamed.");
-      }
-    });
+    run(() => updateTask(id, name), "Task renamed.");
   };
 
-  const confirmDeleteTask = () => {
-    if (!pendingDeleteTask) return;
-    const { id } = pendingDeleteTask;
-    setPendingDeleteTask(null);
-    setRemovingTaskId(id);
-    if (selectedTaskId === id) setSelectedTaskId(tasks.find((t) => t.id !== id)?.id ?? null);
-    setTimeout(() => {
-      setTasks((prev) => prev.filter((t) => t.id !== id));
-      setRemovingTaskId(null);
-      startTransition(async () => {
-        const result = await deleteTask(id);
-        if (!result.success) {
-          toast.error(result.message ?? "Failed to delete task");
-          router.refresh();
-        } else {
-          toast.success("Task deleted.");
-        }
-      });
-    }, 220);
-  };
-
-  const handleAddAnswer = async (label: string, designations: string[] | null, branches: string[] | null) => {
-    if (!selectedTaskId) return;
-    setShowAddAnswer(false);
-    const tempId = -Date.now();
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === selectedTaskId
-          ? { ...t, answers: [...t.answers, { id: tempId, label, sortOrder: t.answers.length, designations, branches }] }
-          : t,
-      ),
-    );
-    const result = await createAnswerOption(selectedTaskId, label, designations, branches);
-    if (!result.success) {
-      toast.error(result.message ?? "Failed to add answer option");
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === selectedTaskId ? { ...t, answers: t.answers.filter((a) => a.id !== tempId) } : t,
-        ),
-      );
-    } else {
-      toast.success("Answer option added.");
-      router.refresh(); // replaces temp ID with real DB ID
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    const p = pendingDelete;
+    setPendingDelete(null);
+    const fn =
+      p.kind === "task" ? () => deleteTask(p.id)
+        : p.kind === "category" ? () => deleteCategory(p.id)
+          : () => deleteSubcategory(p.id);
+    if (p.kind === "task" && selectedTaskId === p.id) {
+      setSelectedTaskId(initialTasks.find((t) => t.id !== p.id)?.id ?? null);
     }
-  };
-
-  const handleEditAnswer = async (id: number, label: string, designations: string[] | null, branches: string[] | null) => {
-    setPendingEditAnswer(null);
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === selectedTaskId
-          ? { ...t, answers: t.answers.map((a) => (a.id === id ? { ...a, label, designations, branches } : a)) }
-          : t,
-      ),
-    );
-    const result = await updateAnswerOption(id, label, designations, branches);
-    if (!result.success) {
-      toast.error(result.message ?? "Failed to update answer option");
-      router.refresh();
-    } else {
-      toast.success("Answer option updated.");
-    }
-  };
-
-  const confirmDeleteAnswer = () => {
-    if (!pendingDeleteAnswer) return;
-    const { id } = pendingDeleteAnswer;
-    setPendingDeleteAnswer(null);
-    setRemovingAnswerId(id);
-    setTimeout(() => {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === selectedTaskId ? { ...t, answers: t.answers.filter((a) => a.id !== id) } : t,
-        ),
-      );
-      setRemovingAnswerId(null);
-      startTransition(async () => {
-        const result = await deleteAnswerOption(id);
-        if (!result.success) {
-          toast.error(result.message ?? "Failed to remove answer option");
-          router.refresh();
-        } else {
-          toast.success("Answer option removed.");
-        }
-      });
-    }, 220);
+    run(fn, `${p.kind[0].toUpperCase()}${p.kind.slice(1)} deleted.`);
   };
 
   return (
@@ -205,24 +133,23 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
       <div className="relative isolate flex flex-wrap items-end justify-between gap-4">
         <HeaderGlow />
         <div>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-            Task Master
-          </h1>
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">Task Master</h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Define tasks and configure predefined answer options for all designations.
+            Define tasks, their categories and subcategories, and who each applies to.
           </p>
         </div>
       </div>
 
-      <div className={cn("mt-6 grid grid-cols-1 gap-5 items-start", selectedTask && "lg:grid-cols-[1fr_400px]")}>
+      <div className={cn("mt-6 grid grid-cols-1 gap-5 items-start", selectedTask && "lg:grid-cols-[1fr_440px]")}>
+        {/* Left: task list */}
         <Card className="gap-0">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2.5 text-xl font-bold">
               <IconChip size="sm"><ClipboardList className="h-3.5 w-3.5 text-foreground" /></IconChip>
               All Tasks
-              <Badge variant="outline">{tasks.length}</Badge>
+              <Badge variant="outline">{initialTasks.length}</Badge>
             </CardTitle>
-            <CardDescription>Click a task to manage its answer options.</CardDescription>
+            <CardDescription>Click a task to manage its categories.</CardDescription>
             <CardAction>
               <Button
                 onClick={() => setShowAddTask(true)}
@@ -235,149 +162,244 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
           </CardHeader>
 
           <CardContent className="px-0 pt-0 pb-0">
-            <ul>
-              {tasks.map((task, idx) => (
-                <li
-                  key={task.id}
-                  onClick={() => { if (editingTaskId !== task.id) setSelectedTaskId(task.id); }}
-                  className={cn(
-                    "group grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3.5 border-b border-border/50 last:border-0 transition-all duration-200 cursor-pointer",
-                    selectedTaskId === task.id && "bg-brand/5",
-                    removingTaskId === task.id && "opacity-0 -translate-x-3",
-                  )}
-                >
-                  <div className={cn(
-                    "h-8 w-8 shrink-0 rounded-xl flex items-center justify-center text-xs font-bold border transition-colors",
-                    selectedTaskId === task.id
-                      ? "bg-brand border-brand/40 text-foreground"
-                      : "bg-muted border-border text-muted-foreground",
-                  )}>
-                    {idx + 1}
-                  </div>
-
-                  <div className="min-w-0">
-                    {editingTaskId === task.id ? (
-                      <input
-                        autoFocus
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSaveEdit();
-                          if (e.key === "Escape") setEditingTaskId(null);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-background border border-brand/40 rounded-lg px-2 py-1 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/30"
-                      />
-                    ) : (
-                      <>
-                        <p className="text-sm font-semibold text-foreground truncate">{task.name}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {task.answers.length} {task.answers.length === 1 ? "answer option" : "answer options"}
-                        </p>
-                      </>
+            {initialTasks.length === 0 ? (
+              <Empty className="border-0 rounded-none py-10">
+                <EmptyMedia variant="icon"><ClipboardList /></EmptyMedia>
+                <EmptyHeader>
+                  <EmptyTitle className="text-base">No tasks yet</EmptyTitle>
+                  <EmptyDescription>Add your first task above.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <ul>
+                {initialTasks.map((task, idx) => (
+                  <li
+                    key={task.id}
+                    onClick={() => { if (editingTaskId !== task.id) setSelectedTaskId(task.id); }}
+                    className={cn(
+                      "group grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3.5 border-b border-border/50 last:border-0 transition-colors cursor-pointer",
+                      selectedTaskId === task.id && "bg-brand/5",
                     )}
-                  </div>
+                  >
+                    <div className={cn(
+                      "h-8 w-8 shrink-0 rounded-xl flex items-center justify-center text-xs font-bold border",
+                      selectedTaskId === task.id ? "bg-brand border-brand/40 text-foreground" : "bg-muted border-border text-muted-foreground",
+                    )}>
+                      {idx + 1}
+                    </div>
 
-                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {editingTaskId === task.id ? (
-                      <>
-                        <Button variant="ghost" size="icon-xs" onClick={handleSaveEdit} className="text-foreground hover:text-foreground hover:bg-brand/10">
-                          <Check className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon-xs" onClick={() => setEditingTaskId(null)} className="text-muted-foreground hover:text-foreground">
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="icon-xs" onClick={() => handleStartEdit(task)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon-xs" onClick={() => setPendingDeleteTask({ id: task.id, name: task.name })} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                        {selectedTaskId === task.id && <ChevronRight className="h-3.5 w-3.5 text-foreground" />}
-                      </>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                    <div className="min-w-0">
+                      {editingTaskId === task.id ? (
+                        <input
+                          autoFocus
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleSaveRename(); if (e.key === "Escape") setEditingTaskId(null); }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-background border border-brand/40 rounded-lg px-2 py-1 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/30"
+                        />
+                      ) : (
+                        <>
+                          <p className="text-sm font-semibold text-foreground truncate">{task.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {task.categories.length} {task.categories.length === 1 ? "category" : "categories"}
+                          </p>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {editingTaskId === task.id ? (
+                        <>
+                          <Button variant="ghost" size="icon-xs" onClick={handleSaveRename} className="text-foreground hover:bg-brand/10">
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon-xs" onClick={() => setEditingTaskId(null)} className="text-muted-foreground hover:text-foreground">
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="ghost" size="icon-xs" onClick={() => { setEditingTaskId(task.id); setEditingName(task.name); }} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon-xs" onClick={() => setPendingDelete({ kind: "task", id: task.id, name: task.name })} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                          {selectedTaskId === task.id && <ChevronRight className="h-3.5 w-3.5 text-foreground" />}
+                        </>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
 
+        {/* Right: categories + subcategories of selected task */}
         {selectedTask && (
-          <AnswerPanel
+          <CategoryPanel
             task={selectedTask}
-            removingAnswerId={removingAnswerId}
-            onRequestAddAnswer={() => setShowAddAnswer(true)}
-            onRequestEditAnswer={(ans) => setPendingEditAnswer(ans)}
-            onRequestDeleteAnswer={(id, label) => setPendingDeleteAnswer({ id, label })}
+            branchNames={branchNames}
+            onAddCategory={() => setCatModal({ mode: "add", taskId: selectedTask.id })}
+            onEditCategory={(category) => setCatModal({ mode: "edit", taskId: selectedTask.id, category })}
+            onDeleteCategory={(id, name) => setPendingDelete({ kind: "category", id, name })}
+            onAddSub={(categoryId) => setSubModal({ mode: "add", categoryId })}
+            onEditSub={(categoryId, sub) => setSubModal({ mode: "edit", categoryId, sub })}
+            onDeleteSub={(id, name) => setPendingDelete({ kind: "subcategory", id, name })}
           />
         )}
       </div>
 
-      {showAddTask && (
-        <AddTaskModal onClose={() => setShowAddTask(false)} onAdd={handleAddTask} />
-      )}
+      {showAddTask && <AddTaskModal onClose={() => setShowAddTask(false)} onAdded={() => { setShowAddTask(false); refresh(); }} />}
 
-      {showAddAnswer && selectedTask && (
-        <AnswerOptionModal
-          mode="add"
-          taskName={selectedTask.name}
+      {catModal && (
+        <RestrictionModal
+          title={catModal.mode === "add" ? "Add category" : "Edit category"}
+          fieldLabel="Category name"
           branchNames={branchNames}
-          onClose={() => setShowAddAnswer(false)}
-          onSave={handleAddAnswer}
+          initial={catModal.mode === "edit" ? catModal.category : undefined}
+          onClose={() => setCatModal(null)}
+          onSave={async (name, designations, branches) => {
+            await run(
+              () => catModal.mode === "add"
+                ? createCategory(catModal.taskId, name, designations, branches)
+                : updateCategory(catModal.category.id, name, designations, branches),
+              catModal.mode === "add" ? "Category added." : "Category updated.",
+            );
+            setCatModal(null);
+          }}
         />
       )}
 
-      {pendingEditAnswer && (
-        <AnswerOptionModal
-          mode="edit"
-          taskName={selectedTask?.name ?? ""}
+      {subModal && (
+        <RestrictionModal
+          title={subModal.mode === "add" ? "Add subcategory" : "Edit subcategory"}
+          fieldLabel="Subcategory name"
           branchNames={branchNames}
-          initial={pendingEditAnswer}
-          onClose={() => setPendingEditAnswer(null)}
-          onSave={(label, designations, branches) => handleEditAnswer(pendingEditAnswer.id, label, designations, branches)}
+          initial={subModal.mode === "edit" ? { name: subModal.sub.label, designations: subModal.sub.designations, branches: subModal.sub.branches } : undefined}
+          onClose={() => setSubModal(null)}
+          onSave={async (name, designations, branches) => {
+            await run(
+              () => subModal.mode === "add"
+                ? createSubcategory(subModal.categoryId, name, designations, branches)
+                : updateSubcategory(subModal.sub.id, name, designations, branches),
+              subModal.mode === "add" ? "Subcategory added." : "Subcategory updated.",
+            );
+            setSubModal(null);
+          }}
         />
       )}
 
-      {pendingDeleteTask && (
+      {pendingDelete && (
         <DeleteConfirmModal
-          title="Delete task?"
-          body={<>Task <span className="font-medium text-foreground">"{pendingDeleteTask.name}"</span> and all its answer options will be permanently deleted.</>}
-          onConfirm={confirmDeleteTask}
-          onCancel={() => setPendingDeleteTask(null)}
-        />
-      )}
-
-      {pendingDeleteAnswer && (
-        <DeleteConfirmModal
-          title="Remove answer option?"
-          body={<><span className="font-medium text-foreground">"{pendingDeleteAnswer.label}"</span> will be permanently removed from this task.</>}
-          onConfirm={confirmDeleteAnswer}
-          onCancel={() => setPendingDeleteAnswer(null)}
+          title={`Delete ${pendingDelete.kind}?`}
+          body={<><span className="font-medium text-foreground">&ldquo;{pendingDelete.name}&rdquo;</span>{pendingDelete.kind !== "subcategory" ? " and everything under it" : ""} will be permanently deleted.</>}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
         />
       )}
     </>
   );
 }
 
-// ─── Answer Panel ─────────────────────────────────────────────────────────────
+// ─── Restriction chips ────────────────────────────────────────────────────────
 
-function AnswerPanel({
-  task,
-  removingAnswerId,
-  onRequestAddAnswer,
-  onRequestEditAnswer,
-  onRequestDeleteAnswer,
+function RestrictionChips({ r }: { r: Restr }) {
+  return (
+    <div className="flex flex-wrap gap-1 mt-0.5">
+      {r.designations?.length ? r.designations.map((d) => {
+        const c = designationChip(d);
+        return c ? (
+          <span key={d} className={cn("inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] font-medium", c.chip)}>
+            <span className={cn("h-1 w-1 rounded-full", c.dot)} />{d}
+          </span>
+        ) : null;
+      }) : <span className="inline-flex items-center px-1.5 rounded-full border border-border bg-muted text-[10px] text-muted-foreground">All designations</span>}
+      {r.branches?.length ? r.branches.map((b) => (
+        <span key={b} className={cn("inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] font-medium", BRANCH_CHIP.chip)}>
+          <span className={cn("h-1 w-1 rounded-full", BRANCH_CHIP.dot)} />{b}
+        </span>
+      )) : <span className="inline-flex items-center px-1.5 rounded-full border border-border bg-muted text-[10px] text-muted-foreground">All branches</span>}
+    </div>
+  );
+}
+
+// ─── Category panel ───────────────────────────────────────────────────────────
+
+function CategoryPanel({
+  task, branchNames, onAddCategory, onEditCategory, onDeleteCategory, onAddSub, onEditSub, onDeleteSub,
 }: {
   task: TaskRow;
-  removingAnswerId: number | null;
-  onRequestAddAnswer: () => void;
-  onRequestEditAnswer: (ans: AnswerOption) => void;
-  onRequestDeleteAnswer: (id: number, label: string) => void;
+  branchNames: string[];
+  onAddCategory: () => void;
+  onEditCategory: (c: Category) => void;
+  onDeleteCategory: (id: number, name: string) => void;
+  onAddSub: (categoryId: number) => void;
+  onEditSub: (categoryId: number, s: SubCategory) => void;
+  onDeleteSub: (id: number, name: string) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const [fBranch, setFBranch] = useState("");
+  const [fDesig, setFDesig] = useState("");
+
+  // Search matches category or subcategory name; the branch/designation filter
+  // keeps categories/subcategories a user with that scope would see (both levels).
+  // Search kicks in at 3+ characters; shorter input is treated as no search.
+  const trimmed = query.trim();
+  const q = trimmed.length >= 3 ? trimmed.toLowerCase() : "";
+  const matches = (s: string) => !q || s.toLowerCase().includes(q);
+  const visible = task.categories
+    .filter((c) => allows(c, fDesig, fBranch))
+    .map((c) => {
+      const catNameMatch = matches(c.name);
+      const subs = c.subcategories.filter((s) => allows(s, fDesig, fBranch) && (catNameMatch || matches(s.label)));
+      return { c, subs, show: catNameMatch || subs.length > 0 };
+    })
+    .filter((x) => x.show);
+
+  const catItems = visible.map(({ c, subs }) => (
+    <AccordionItem key={c.id} value={String(c.id)} className="px-4">
+      <div className="flex items-start">
+        <div className="flex-1 min-w-0">
+          <AccordionTrigger className="py-3.5 hover:no-underline">
+            <div className="min-w-0 text-left">
+              <p className="text-sm font-bold text-foreground truncate">{c.name}</p>
+              <RestrictionChips r={c} />
+            </div>
+          </AccordionTrigger>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0 pt-4">
+          <Button variant="ghost" size="icon-xs" onClick={() => onEditCategory(c)} className="text-muted-foreground hover:text-foreground"><Pencil className="h-3 w-3" /></Button>
+          <Button variant="ghost" size="icon-xs" onClick={() => onDeleteCategory(c.id, c.name)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" /></Button>
+        </div>
+      </div>
+
+      <AccordionContent className="pb-3">
+        <ul className="ml-1 border-l border-border/60 pl-3 space-y-1.5">
+          {subs.map((s) => (
+            <li key={s.id} className="group/sub flex items-start gap-2 rounded-lg px-2 py-1.5 border border-transparent transition-colors hover:border-border hover:bg-muted/50">
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-foreground truncate mb-0!">{s.label}</p>
+                <RestrictionChips r={s} />
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0 opacity-100 sm:opacity-0 sm:group-hover/sub:opacity-100 transition-opacity">
+                <Button variant="ghost" size="icon-xs" onClick={() => onEditSub(c.id, s)} className="text-muted-foreground hover:text-foreground"><Pencil className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="icon-xs" onClick={() => onDeleteSub(s.id, s.label)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" /></Button>
+              </div>
+            </li>
+          ))}
+          <li>
+            <Button variant="ghost" onClick={() => onAddSub(c.id)} className="text-xs text-foreground hover:bg-brand/10 gap-1 h-auto py-1 px-2 rounded-full">
+              <Plus className="h-3 w-3" /> Add subcategory
+            </Button>
+          </li>
+        </ul>
+      </AccordionContent>
+    </AccordionItem>
+  ));
+
   return (
     <Card className="gap-0">
       <CardHeader className="border-b border-border min-w-0">
@@ -386,240 +408,170 @@ function AnswerPanel({
           <CardTitle className="text-base font-bold truncate">{task.name}</CardTitle>
         </div>
         <CardAction>
-          <Button
-            onClick={onRequestAddAnswer}
-            className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-1.5 h-auto py-1.5 px-3 text-xs"
-          >
+          <Button onClick={onAddCategory} className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-1.5 h-auto py-1.5 px-3 text-xs">
             <Plus className="h-3 w-3" />
-            Add option
+            Add category
           </Button>
         </CardAction>
       </CardHeader>
 
+      {/* Search + filter over categories/subcategories */}
+      {task.categories.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search categories…"
+              className="pl-8 rounded-full bg-muted border-border text-sm h-8 focus-visible:ring-brand/30"
+            />
+          </div>
+          <FilterSelect label="Branch" value={fBranch} onChange={setFBranch} options={branchNames} />
+          <FilterSelect label="Designation" value={fDesig} onChange={setFDesig} options={DESIGNATIONS} />
+        </div>
+      )}
+
       <CardContent className="px-0 pt-0 pb-0">
-        {task.answers.length === 0 ? (
+        {task.categories.length === 0 ? (
           <Empty className="border-0 rounded-none py-10">
-            <EmptyMedia variant="icon"><ClipboardList /></EmptyMedia>
+            <EmptyMedia variant="icon"><FolderTree /></EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">No answer options yet</EmptyTitle>
-              <EmptyDescription>Add the first predefined answer option for this task.</EmptyDescription>
+              <EmptyTitle className="text-base">No categories yet</EmptyTitle>
+              <EmptyDescription>Add a category, then subcategories under it.</EmptyDescription>
             </EmptyHeader>
-            <Button
-              variant="ghost"
-              onClick={onRequestAddAnswer}
-              className="text-xs text-foreground hover:text-foreground hover:bg-brand/10 gap-1 h-auto py-1.5 px-3 rounded-full"
-            >
-              <Plus className="h-3 w-3" />
-              Add the first one
-            </Button>
           </Empty>
+        ) : visible.length === 0 ? (
+          <Empty className="border-0 rounded-none py-10">
+            <EmptyMedia variant="icon"><Search /></EmptyMedia>
+            <EmptyHeader>
+              <EmptyTitle className="text-base">No matches</EmptyTitle>
+              <EmptyDescription>Try a different search or filter.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : q ? (
+          // Search active: expand every matching category so subcategory hits are
+          // visible. Re-keyed on the query so it re-opens as the search changes.
+          <Accordion type="multiple" key={q} defaultValue={visible.map(({ c }) => String(c.id))} className="border-0 rounded-none">
+            {catItems}
+          </Accordion>
         ) : (
-          <ul>
-            {task.answers.map((ans, idx) => (
-              <li
-                key={ans.id}
-                className={cn(
-                  "group flex items-start gap-3 px-4 py-3 border-b border-border/50 last:border-0 transition-all duration-200",
-                  removingAnswerId === ans.id && "opacity-0 -translate-x-3",
-                )}
-              >
-                <span className="h-5 w-5 shrink-0 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-semibold text-muted-foreground mt-0.5">
-                  {idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{ans.label}</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {ans.designations?.length ? (
-                      ans.designations.map((d) => {
-                        const colors = getDesignationColors(d);
-                        return colors ? (
-                          <span key={d} className={cn("inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] font-medium", colors.chip)}>
-                            <span className={cn("h-1 w-1 rounded-full shrink-0", colors.dot)} />
-                            {d}
-                          </span>
-                        ) : null;
-                      })
-                    ) : (
-                      <span className="inline-flex items-center px-1.5 rounded-full border border-border bg-muted text-[10px] font-medium text-muted-foreground">
-                        All designations
-                      </span>
-                    )}
-                    {ans.branches?.length ? (
-                      ans.branches.map((b) => (
-                        <span key={b} className={cn("inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] font-medium", BRANCH_CHIP.chip)}>
-                          <span className={cn("h-1 w-1 rounded-full shrink-0", BRANCH_CHIP.dot)} />
-                          {b}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="inline-flex items-center px-1.5 rounded-full border border-border bg-muted text-[10px] font-medium text-muted-foreground">
-                        All branches
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" size="icon-xs" onClick={() => onRequestEditAnswer(ans)} className="text-muted-foreground hover:text-foreground">
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                  <Button variant="ghost" size="icon-xs" onClick={() => onRequestDeleteAnswer(ans.id, ans.label)} className="text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          // Browsing: one open at a time, all closed by default.
+          <Accordion type="single" collapsible className="border-0 rounded-none">
+            {catItems}
+          </Accordion>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// ─── Modal Shell ──────────────────────────────────────────────────────────────
+// ─── Filter select ────────────────────────────────────────────────────────────
+// Radix Select forbids empty-string values, so "all" uses a sentinel.
+const ALL = "__all__";
+
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
+  return (
+    <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? "" : v)}>
+      <SelectTrigger size="sm" className={cn("rounded-full text-xs bg-muted", value && "border-brand/40")}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>All {label.toLowerCase()}s</SelectItem>
+        {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// ─── Modal shell ──────────────────────────────────────────────────────────────
 
 function ModalShell({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl w-full max-w-sm shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="bg-card rounded-2xl w-full max-w-sm shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>
   );
 }
 
-// ─── Answer Option Modal (Add & Edit) ─────────────────────────────────────────
+// ─── Restriction modal (category & subcategory) ───────────────────────────────
 
-function AnswerOptionModal({
-  mode,
-  taskName,
-  branchNames,
-  initial,
-  onClose,
-  onSave,
+function RestrictionModal({
+  title, fieldLabel, branchNames, initial, onClose, onSave,
 }: {
-  mode: "add" | "edit";
-  taskName: string;
+  title: string;
+  fieldLabel: string;
   branchNames: string[];
-  initial?: AnswerOption;
+  initial?: { name: string; designations: string[] | null; branches: string[] | null };
   onClose: () => void;
-  onSave: (label: string, designations: string[] | null, branches: string[] | null) => Promise<void>;
+  onSave: (name: string, designations: string[] | null, branches: string[] | null) => Promise<void>;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [label, setLabel] = useState(initial?.label ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
   const [designations, setDesignations] = useState<string[]>(initial?.designations ?? []);
   const [branches, setBranches] = useState<string[]>(initial?.branches ?? []);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const toggle = (list: string[], set: (v: string[]) => void, v: string) =>
+    set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!label.trim() || isPending) return;
+    if (!name.trim() || isPending) return;
     setError(null);
     startTransition(async () => {
-      try {
-        await onSave(
-          label.trim(),
-          designations.length > 0 ? designations : null,
-          branches.length > 0 ? branches : null,
-        );
-      } catch {
-        setError("Something went wrong");
-      }
+      try { await onSave(name.trim(), designations.length ? designations : null, branches.length ? branches : null); }
+      catch { setError("Something went wrong"); }
     });
   };
 
-  const toggleDesignation = (d: string) =>
-    setDesignations((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
-
-  const toggleBranch = (b: string) =>
-    setBranches((prev) => prev.includes(b) ? prev.filter((x) => x !== b) : [...prev, b]);
-
   return (
     <ModalShell onClose={onClose}>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={submit}>
         <div className="flex items-start justify-between px-6 py-5 border-b border-border">
-          <div>
-            <p className="text-[10px] font-semibold text-foreground tracking-widest uppercase">{taskName}</p>
-            <h3 className="text-xl font-bold tracking-tight mt-1 text-foreground">
-              {mode === "add" ? "Add answer option" : "Edit answer option"}
-            </h3>
-          </div>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </Button>
+          <h3 className="text-xl font-bold tracking-tight text-foreground">{title}</h3>
+          <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></Button>
         </div>
 
         <div className="px-6 py-5 space-y-4">
           <label className="block">
-            <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">Label</span>
-            <Input
-              autoFocus
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Completed"
-              className="rounded-xl bg-muted border-border focus-visible:ring-brand/30 focus-visible:border-brand/40"
-            />
+            <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">{fieldLabel}</span>
+            <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Passbook" className="rounded-xl bg-muted border-border focus-visible:ring-brand/30" />
           </label>
 
           <div>
             <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Designations</span>
             <div className="flex flex-wrap gap-1.5">
-              {DESIGNATION_META.map(({ name, chip, dot }) => {
-                const active = designations.includes(name);
+              {DESIGNATION_META.map(({ name: dn, chip, dot }) => {
+                const active = designations.includes(dn);
                 return (
-                  <Button
-                    key={name}
-                    type="button"
-                    variant="ghost"
-                    onClick={() => toggleDesignation(name)}
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 h-auto text-xs font-medium gap-1.5",
-                      active ? chip : "bg-muted border-border text-muted-foreground hover:bg-muted hover:border-foreground/20",
-                    )}
-                  >
-                    <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", active ? dot : "bg-muted-foreground/40")} />
-                    {name}
+                  <Button key={dn} type="button" variant="ghost" onClick={() => toggle(designations, setDesignations, dn)}
+                    className={cn("rounded-full border px-3 py-1.5 h-auto text-xs font-medium gap-1.5", active ? chip : "bg-muted border-border text-muted-foreground hover:bg-muted hover:border-foreground/20")}>
+                    <span className={cn("h-1.5 w-1.5 rounded-full", active ? dot : "bg-muted-foreground/40")} />{dn}
                   </Button>
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              {designations.length === 0
-                ? "No selection — applies to all designations."
-                : `Applies to: ${designations.join(", ")}.`}
-            </p>
+            <p className="text-xs text-muted-foreground mt-2">{designations.length === 0 ? "No selection — all designations." : `Applies to: ${designations.join(", ")}.`}</p>
           </div>
 
           <div>
             <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Branches</span>
             <div className="flex flex-wrap gap-1.5">
-              {branchNames.map((name) => {
-                const active = branches.includes(name);
+              {branchNames.map((bn) => {
+                const active = branches.includes(bn);
                 return (
-                  <Button
-                    key={name}
-                    type="button"
-                    variant="ghost"
-                    onClick={() => toggleBranch(name)}
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 h-auto text-xs font-medium gap-1.5",
-                      active ? BRANCH_CHIP.chip : "bg-muted border-border text-muted-foreground hover:bg-muted hover:border-foreground/20",
-                    )}
-                  >
-                    <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", active ? BRANCH_CHIP.dot : "bg-muted-foreground/40")} />
-                    {name}
+                  <Button key={bn} type="button" variant="ghost" onClick={() => toggle(branches, setBranches, bn)}
+                    className={cn("rounded-full border px-3 py-1.5 h-auto text-xs font-medium gap-1.5", active ? BRANCH_CHIP.chip : "bg-muted border-border text-muted-foreground hover:bg-muted hover:border-foreground/20")}>
+                    <span className={cn("h-1.5 w-1.5 rounded-full", active ? BRANCH_CHIP.dot : "bg-muted-foreground/40")} />{bn}
                   </Button>
                 );
               })}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {branchNames.length === 0
-                ? "No active branches defined."
-                : branches.length === 0
-                  ? "No selection — applies to all branches."
-                  : `Applies to: ${branches.join(", ")}.`}
+              {branchNames.length === 0 ? "No active branches." : branches.length === 0 ? "No selection — all branches." : `Applies to: ${branches.join(", ")}.`}
             </p>
           </div>
 
@@ -628,13 +580,9 @@ function AnswerOptionModal({
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
           <Button type="button" variant="outline" onClick={onClose} className="rounded-full">Cancel</Button>
-          <Button
-            type="submit"
-            disabled={!label.trim() || isPending}
-            className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
-          >
-            {mode === "add" ? <Plus className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-            {isPending ? (mode === "add" ? "Adding…" : "Saving…") : (mode === "add" ? "Add option" : "Save changes")}
+          <Button type="submit" disabled={!name.trim() || isPending} className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5">
+            <Check className="h-3.5 w-3.5" />
+            {isPending ? "Saving…" : "Save"}
           </Button>
         </div>
       </form>
@@ -644,55 +592,39 @@ function AnswerOptionModal({
 
 // ─── Add Task Modal ───────────────────────────────────────────────────────────
 
-function AddTaskModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: string) => void }) {
+function AddTaskModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || isPending) return;
     setError(null);
     startTransition(async () => {
-      const result = await createTask(name.trim());
-      if (result.success) { onAdd(name.trim()); } else { setError(result.message); }
+      const res = await createTask(name.trim());
+      if (res.success) { toast.success("Task added."); onAdded(); }
+      else setError(res.message);
     });
   };
 
   return (
     <ModalShell onClose={onClose}>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={submit}>
         <div className="flex items-start justify-between px-6 py-5 border-b border-border">
-          <div>
-            <p className="text-[10px] font-semibold text-foreground tracking-widest uppercase">New task</p>
-            <h3 className="text-xl font-bold tracking-tight mt-1 text-foreground">Add a task</h3>
-          </div>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </Button>
+          <h3 className="text-xl font-bold tracking-tight text-foreground">Add a task</h3>
+          <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></Button>
         </div>
-
         <div className="px-6 py-5">
           <label className="block">
             <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">Task name</span>
-            <Input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Daily Status"
-              className="rounded-xl bg-muted border-border focus-visible:ring-brand/30 focus-visible:border-brand/40"
-            />
+            <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mobilisation" className="rounded-xl bg-muted border-border focus-visible:ring-brand/30" />
           </label>
           {error && <p className="text-xs text-destructive mt-2">{error}</p>}
         </div>
-
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
           <Button type="button" variant="outline" onClick={onClose} className="rounded-full">Cancel</Button>
-          <Button
-            type="submit"
-            disabled={!name.trim() || isPending}
-            className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5"
-          >
+          <Button type="submit" disabled={!name.trim() || isPending} className="rounded-full bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-auto py-2 px-5">
             <Plus className="h-3.5 w-3.5" />
             {isPending ? "Adding…" : "Add task"}
           </Button>
@@ -704,24 +636,14 @@ function AddTaskModal({ onClose, onAdd }: { onClose: () => void; onAdd: (name: s
 
 // ─── Delete Confirm Modal ─────────────────────────────────────────────────────
 
-function DeleteConfirmModal({
-  title,
-  body,
-  onConfirm,
-  onCancel,
-}: {
-  title: string;
-  body: React.ReactNode;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
+function DeleteConfirmModal({ title, body, onConfirm, onCancel }: { title: string; body: React.ReactNode; onConfirm: () => void; onCancel: () => void }) {
   return (
     <ModalShell onClose={onCancel}>
       <div className="px-6 pt-6 pb-4">
         <div className="h-10 w-10 rounded-full bg-destructive/10 border border-destructive/20 grid place-items-center mb-4">
           <AlertTriangle className="h-5 w-5 text-destructive" />
         </div>
-        <h3 className="text-lg font-bold text-foreground">{title}</h3>
+        <h3 className="text-lg font-bold text-foreground capitalize">{title}</h3>
         <p className="text-sm text-muted-foreground mt-1.5">{body}</p>
       </div>
       <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">

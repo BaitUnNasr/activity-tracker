@@ -30,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
 import { HeaderGlow } from "@/src/components/page-ui";
-import { applyEarnedLeave, revokeLeaveDate, saveDay, type TaskForPicker, type TasksPageData } from "../actions";
+import { applyEarnedLeave, revokeLeaveDate, saveDay, type CategoryForPicker, type TaskForPicker, type TasksPageData } from "../actions";
 import type { LeaveType } from "../leave";
 import {
   CalendarCard,
@@ -79,10 +79,15 @@ export function TaskInputClient({
   // Number of saves in flight — drives the "Saving…" overlay.
   const [savingCount, setSavingCount] = useState(0);
   const isSaving = savingCount > 0;
+  // Background (debounced) autosave status — a subtle inline indicator, not the overlay.
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
-  // Add-task picker state
-  const [pickStep, setPickStep] = useState<"none" | "task" | "answer">("none");
+  // Add-activity picker state (Task → Category → Subcategory → hours)
+  const [pickStep, setPickStep] = useState<"none" | "task" | "category" | "answer">("none");
+  // Direction of the last step change — drives the slide-in animation.
+  const [pickDir, setPickDir] = useState<"fwd" | "back">("fwd");
   const [pickedTaskId, setPickedTaskId] = useState<number | null>(null);
+  const [pickedCategoryId, setPickedCategoryId] = useState<number | null>(null);
   const [pickedAnswer, setPickedAnswer] = useState("");
   const [isCustomAnswer, setIsCustomAnswer] = useState(false);
   const [customAnswer, setCustomAnswer] = useState("");
@@ -107,6 +112,58 @@ export function TaskInputClient({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // (1) Debounced autosave — collapse rapid edits (add / remove / hour +/-) into a
+  // single write ~1.5s after the last change, so hour stepping doesn't hammer the DB.
+  useEffect(() => {
+    if (!isDirty) return;
+    const timer = setTimeout(() => {
+      const snapshot = { ...localDay };
+      const date = selected;
+      setIsDirty(false); // this batch is now being saved; new edits re-arm the timer
+      setAutoSaveState("saving");
+      runSave(() => saveDay(userId, date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries))
+        .then((result) => {
+          if (result.success) {
+            setServerMap((prev) => new Map(prev).set(date, snapshot));
+            setAutoSaveState("saved");
+          } else {
+            setIsDirty(true);
+            setAutoSaveState("idle");
+            toast.error("Auto-save failed — will retry.");
+          }
+        })
+        .catch(() => {
+          setIsDirty(true);
+          setAutoSaveState("idle");
+        });
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, localDay, selected, userId]);
+
+  // (2) Flush pending changes when the tab is hidden or closed. keepalive lets the
+  // request outlive page teardown, which the unmount effect above cannot guarantee.
+  useEffect(() => {
+    const flush = () => {
+      const { isDirty: dirty, selected: sel, localDay: day } = stateRef.current;
+      if (!dirty) return;
+      navigator.sendBeacon?.(
+        "/api/tasks/save",
+        new Blob(
+          [JSON.stringify({ date: sel, halfDay: day.halfDay, onLeave: day.onLeave, leaveType: day.leaveType, entries: day.entries })],
+          { type: "application/json" },
+        ),
+      );
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   // Warn before closing/reloading the tab while a save is pending or in flight,
@@ -291,24 +348,37 @@ export function TaskInputClient({
     });
   };
 
+  const pickedCategory =
+    initialData.tasks.find((t) => t.id === pickedTaskId)?.categories.find((c) => c.id === pickedCategoryId) ?? null;
+
   const handleConfirmAdd = () => {
-    if (!pickedTaskId) return;
+    if (!pickedTaskId || !pickedCategory) return;
     const answer = isCustomAnswer ? customAnswer.trim() : pickedAnswer;
     if (!answer || pickedHours <= 0) return;
-    modify((c) => ({ ...c, entries: [...c.entries, { taskId: pickedTaskId, answer, hours: pickedHours }] }));
+    const category = pickedCategory.name;
+    // A subcategory can only be logged once per task+category.
+    if (localDay.entries.some((e) => e.taskId === pickedTaskId && e.category === category && e.answer === answer)) {
+      toast.error("That subcategory is already added.");
+      return;
+    }
+    modify((c) => ({ ...c, entries: [...c.entries, { taskId: pickedTaskId, category, answer, hours: pickedHours }] }));
     setPickStep("none");
     setPickedTaskId(null);
+    setPickedCategoryId(null);
     setPickedAnswer("");
     setIsCustomAnswer(false);
     setCustomAnswer("");
     setPickedHours(1);
   };
 
-  const handleRemove = (taskId: number) =>
-    modify((c) => ({ ...c, entries: c.entries.filter((e) => e.taskId !== taskId) }));
+  const handleRemove = (taskId: number, category: string, answer: string) =>
+    modify((c) => ({ ...c, entries: c.entries.filter((e) => !(e.taskId === taskId && e.category === category && e.answer === answer)) }));
 
-  const handleHours = (taskId: number, hours: number) =>
-    modify((c) => ({ ...c, entries: c.entries.map((e) => e.taskId === taskId ? { ...e, hours } : e) }));
+  const handleHours = (taskId: number, category: string, answer: string, hours: number) =>
+    modify((c) => ({
+      ...c,
+      entries: c.entries.map((e) => (e.taskId === taskId && e.category === category && e.answer === answer ? { ...e, hours } : e)),
+    }));
 
   const stepMonth = (dir: number) => {
     setViewYear((y) => {
@@ -326,13 +396,25 @@ export function TaskInputClient({
     handleSelectDate(today);
   };
 
-  const availableTasks = initialData.tasks.filter(
-    (t) => !localDay.entries.some((e) => e.taskId === t.id),
-  );
   const pickedTask = initialData.tasks.find((t) => t.id === pickedTaskId) ?? null;
-  const canConfirmAdd = pickedTaskId !== null && (
-    isCustomAnswer ? customAnswer.trim().length > 0 : pickedAnswer.length > 0
-  ) && pickedHours > 0;
+  // Subcategories already logged for the picked task+category (can't repeat).
+  const usedAnswersForPicked = pickedCategory
+    ? localDay.entries
+        .filter((e) => e.taskId === pickedTaskId && e.category === pickedCategory.name)
+        .map((e) => e.answer)
+    : [];
+  const chosenAnswer = isCustomAnswer ? customAnswer.trim() : pickedAnswer;
+  const canConfirmAdd =
+    pickedTaskId !== null &&
+    pickedCategoryId !== null &&
+    chosenAnswer.length > 0 &&
+    pickedHours > 0 &&
+    !usedAnswersForPicked.includes(chosenAnswer);
+
+  const slideAnim =
+    pickDir === "back"
+      ? "animate-in slide-in-from-left-5 fade-in duration-200"
+      : "animate-in slide-in-from-right-5 fade-in duration-200";
 
   return (
     <>
@@ -499,12 +581,25 @@ export function TaskInputClient({
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-base font-bold text-foreground">Tasks</h3>
-                    <span className="text-xs text-muted-foreground">{localDay.entries.length} logged</span>
+                    <div className="flex items-center gap-2">
+                      {isDirty ? (
+                        <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Unsaved…</span>
+                      ) : autoSaveState === "saving" ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+                        </span>
+                      ) : autoSaveState === "saved" ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                          <Check className="h-3 w-3" /> Saved
+                        </span>
+                      ) : null}
+                      <span className="text-xs text-muted-foreground">{localDay.entries.length} logged</span>
+                    </div>
                   </div>
 
                   {localDay.entries.length === 0 && isEditable && pickStep === "none" && (
                     <div className="px-4 py-5 border border-dashed border-border rounded-xl text-center text-sm text-muted-foreground mb-3">
-                      No tasks yet — add one below.
+                      No activities logged yet — add one below.
                     </div>
                   )}
 
@@ -517,20 +612,21 @@ export function TaskInputClient({
                     {localDay.entries.map((entry) => {
                       const task = initialData.tasks.find((t) => t.id === entry.taskId);
                       if (!task) return null;
+                      const key = `${entry.taskId}::${entry.category}::${entry.answer}`;
                       if (!isEditable) {
-                        return <ReadOnlyTaskRow key={entry.taskId} task={task} entry={entry} />;
+                        return <ReadOnlyTaskRow key={key} task={task} entry={entry} />;
                       }
                       const otherHours = localDay.entries
-                        .filter((e) => e.taskId !== entry.taskId)
+                        .filter((e) => !(e.taskId === entry.taskId && e.category === entry.category && e.answer === entry.answer))
                         .reduce((s, e) => s + e.hours, 0);
                       return (
                         <TaskRow
-                          key={entry.taskId}
+                          key={key}
                           task={task}
                           entry={entry}
                           maxHours={Math.max(0.5, target - otherHours)}
-                          onHours={(h) => handleHours(entry.taskId, h)}
-                          onRemove={() => handleRemove(entry.taskId)}
+                          onHours={(h) => handleHours(entry.taskId, entry.category, entry.answer, h)}
+                          onRemove={() => handleRemove(entry.taskId, entry.category, entry.answer)}
                         />
                       );
                     })}
@@ -538,50 +634,66 @@ export function TaskInputClient({
 
                   {isEditable && pickStep === "none" && (
                     <Button
-                      onClick={() => { setPickStep("task"); setPickedTaskId(null); }}
-                      disabled={availableTasks.length === 0 || total >= target}
+                      onClick={() => { setPickDir("fwd"); setPickStep("task"); setPickedTaskId(null); setPickedCategoryId(null); }}
+                      disabled={total >= target}
                       className="w-full rounded-xl bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-10"
                     >
                       <Plus className="h-4 w-4" />
-                      {total >= target
-                        ? "Daily target reached"
-                        : availableTasks.length === 0
-                          ? "All tasks added"
-                          : "Add task"}
+                      {total >= target ? "Daily target reached" : "Add activity"}
                     </Button>
                   )}
 
                   {isEditable && pickStep === "task" && (
                     <TaskPicker
-                      tasks={availableTasks}
+                      anim={slideAnim}
+                      tasks={initialData.tasks}
                       onPick={(id) => {
-                        const remaining = Math.max(0.5, target - total);
+                        setPickDir("fwd");
                         setPickedTaskId(id);
+                        setPickedCategoryId(null);
+                        setPickStep("category");
+                      }}
+                      onCancel={() => setPickStep("none")}
+                    />
+                  )}
+
+                  {isEditable && pickStep === "category" && pickedTask && (
+                    <CategoryPicker
+                      anim={slideAnim}
+                      task={pickedTask}
+                      onPick={(cid) => {
+                        const remaining = Math.max(0.5, target - total);
+                        setPickDir("fwd");
+                        setPickedCategoryId(cid);
                         setPickStep("answer");
                         setPickedAnswer("");
                         setIsCustomAnswer(false);
                         setCustomAnswer("");
                         setPickedHours(Math.min(1, remaining));
                       }}
+                      onBack={() => { setPickDir("back"); setPickStep("task"); }}
                       onCancel={() => setPickStep("none")}
                     />
                   )}
 
-                  {isEditable && pickStep === "answer" && pickedTask && (
+                  {isEditable && pickStep === "answer" && pickedTask && pickedCategory && (
                     <AnswerPicker
+                      anim={slideAnim}
                       task={pickedTask}
+                      category={pickedCategory}
                       pickedAnswer={pickedAnswer}
                       isCustom={isCustomAnswer}
                       customAnswer={customAnswer}
                       hours={pickedHours}
                       maxHours={Math.max(0.5, target - total)}
                       canConfirm={canConfirmAdd}
+                      usedAnswers={usedAnswersForPicked}
                       onSelectAnswer={(a) => { setPickedAnswer(a); setIsCustomAnswer(false); }}
                       onSelectCustom={() => { setIsCustomAnswer(true); setPickedAnswer(""); }}
                       onCustomChange={setCustomAnswer}
                       onHours={setPickedHours}
                       onConfirm={handleConfirmAdd}
-                      onBack={() => setPickStep("task")}
+                      onBack={() => { setPickDir("back"); setPickStep("category"); }}
                     />
                   )}
 
@@ -1097,7 +1209,7 @@ function ProgressCard({
               const taskName = tasks.find((t) => t.id === e.taskId)?.name ?? "Unknown";
               const w = (e.hours / max) * 100;
               return (
-                <TooltipProvider key={e.taskId}>
+                <TooltipProvider key={`${e.taskId}::${e.category}::${e.answer}`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div
@@ -1108,7 +1220,7 @@ function ProgressCard({
                     <TooltipContent side="top">
                       <div className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: taskColor(e.taskId) }} />
-                        <span>{taskName}: {fmtHrs(e.hours)}</span>
+                        <span>{taskName}{e.category ? ` · ${e.category}` : ""} · {e.answer}: {fmtHrs(e.hours)}</span>
                       </div>
                     </TooltipContent>
                   </Tooltip>
@@ -1149,7 +1261,9 @@ function TaskRow({
       <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
       <div className="flex-1 min-w-0">
         <div className="text-[13.5px] font-semibold text-foreground truncate">{task.name}</div>
-        <div className="text-[11px] text-muted-foreground truncate">{entry.answer}</div>
+        <div className="text-[11px] text-muted-foreground truncate">
+          {entry.category ? `${entry.category} · ${entry.answer}` : entry.answer}
+        </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button
@@ -1183,20 +1297,36 @@ function TaskRow({
 // ─── Task picker ──────────────────────────────────────────────────────────────
 
 function TaskPicker({
-  tasks, onPick, onCancel,
+  tasks, onPick, onCancel, anim,
 }: {
-  tasks: TaskForPicker[]; onPick: (id: number) => void; onCancel: () => void;
+  tasks: TaskForPicker[]; onPick: (id: number) => void; onCancel: () => void; anim?: string;
 }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filtered = q ? tasks.filter((t) => t.name.toLowerCase().includes(q)) : tasks;
+
   return (
-    <div className="mt-2 border border-border rounded-xl overflow-hidden">
+    <div className={cn("mt-2 border border-border rounded-xl overflow-hidden", anim)}>
       <div className="flex items-center justify-between px-3 py-2 bg-muted border-b border-border">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Select task</span>
         <button onClick={onCancel} className="h-5 w-5 grid place-items-center rounded text-muted-foreground hover:text-foreground">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
+      <div className="p-2 border-b border-border">
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search tasks…"
+          className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30"
+        />
+      </div>
       <ul className="max-h-48 overflow-y-auto [scrollbar-width:thin]">
-        {tasks.map((t, idx) => (
+        {filtered.length === 0 && (
+          <li className="px-3 py-4 text-center text-xs text-muted-foreground">No tasks match.</li>
+        )}
+        {filtered.map((t) => (
           <li key={t.id}>
             <button
               onClick={() => onPick(t.id)}
@@ -1204,7 +1334,66 @@ function TaskPicker({
             >
               <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(t.id) }} />
               <span className="text-sm font-medium text-foreground flex-1 truncate">{t.name}</span>
-              <span className="text-xs text-muted-foreground shrink-0">{t.answers.length} options</span>
+              <span className="text-xs text-muted-foreground shrink-0">{t.categories.length} categories</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ─── Category picker ──────────────────────────────────────────────────────────
+
+function CategoryPicker({
+  task, onPick, onBack, onCancel, anim,
+}: {
+  task: TaskForPicker; onPick: (categoryId: number) => void; onBack: () => void; onCancel: () => void; anim?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  // Match on category name or any of its subcategory labels.
+  const filtered = q
+    ? task.categories.filter(
+        (c) => c.name.toLowerCase().includes(q) || c.subcategories.some((s) => s.label.toLowerCase().includes(q)),
+      )
+    : task.categories;
+
+  return (
+    <div className={cn("mt-2 border border-border rounded-xl overflow-hidden", anim)}>
+      <div className="flex items-center gap-2 px-3 py-2 bg-muted border-b border-border">
+        <button onClick={onBack} className="h-5 w-5 grid place-items-center rounded text-muted-foreground hover:text-foreground">
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
+          <span className="text-xs font-semibold text-foreground truncate">{task.name}</span>
+        </div>
+        <button onClick={onCancel} className="h-5 w-5 grid place-items-center rounded text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="p-2 border-b border-border">
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search categories & subcategories…"
+          className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30"
+        />
+      </div>
+      <ul className="max-h-48 overflow-y-auto [scrollbar-width:thin]">
+        {filtered.length === 0 && (
+          <li className="px-3 py-4 text-center text-xs text-muted-foreground">No categories match.</li>
+        )}
+        {filtered.map((c) => (
+          <li key={c.id}>
+            <button
+              onClick={() => onPick(c.id)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted transition-colors border-b border-border/50 last:border-0"
+            >
+              <span className="text-sm font-medium text-foreground flex-1 truncate">{c.name}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{c.subcategories.length} options</span>
             </button>
           </li>
         ))}
@@ -1216,23 +1405,28 @@ function TaskPicker({
 // ─── Answer picker ────────────────────────────────────────────────────────────
 
 function AnswerPicker({
-  task, pickedAnswer, isCustom, customAnswer, hours, maxHours, canConfirm,
-  onSelectAnswer, onSelectCustom, onCustomChange, onHours, onConfirm, onBack,
+  task, category, pickedAnswer, isCustom, customAnswer, hours, maxHours, canConfirm, usedAnswers,
+  onSelectAnswer, onSelectCustom, onCustomChange, onHours, onConfirm, onBack, anim,
 }: {
-  task: TaskForPicker; pickedAnswer: string; isCustom: boolean; customAnswer: string;
-  hours: number; maxHours: number; canConfirm: boolean;
+  task: TaskForPicker; category: CategoryForPicker; pickedAnswer: string; isCustom: boolean; customAnswer: string;
+  hours: number; maxHours: number; canConfirm: boolean; usedAnswers: string[];
   onSelectAnswer: (a: string) => void; onSelectCustom: () => void;
   onCustomChange: (v: string) => void; onHours: (h: number) => void;
-  onConfirm: () => void; onBack: () => void;
+  onConfirm: () => void; onBack: () => void; anim?: string;
 }) {
   const atMax = hours >= maxHours;
+  const customTrimmed = customAnswer.trim();
+  const customDuplicate = isCustom && customTrimmed.length > 0 && usedAnswers.includes(customTrimmed);
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const subs = q ? category.subcategories.filter((s) => s.label.toLowerCase().includes(q)) : category.subcategories;
   const stepH = (delta: number) => {
     const n = Math.round((hours + delta) * 2) / 2;
     if (n >= 0.5 && n <= maxHours) onHours(n);
   };
 
   return (
-    <div className="mt-2 border border-border rounded-xl overflow-hidden">
+    <div className={cn("mt-2 border border-border rounded-xl overflow-hidden", anim)}>
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-muted border-b border-border">
         <button onClick={onBack} className="h-5 w-5 grid place-items-center rounded text-muted-foreground hover:text-foreground">
@@ -1240,28 +1434,52 @@ function AnswerPicker({
         </button>
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
-          <span className="text-xs font-semibold text-foreground truncate">{task.name}</span>
+          <span className="text-xs font-semibold text-foreground truncate">{task.name} · {category.name}</span>
         </div>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Answer</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Subcategory</span>
       </div>
 
-      {/* Answer options */}
+      {/* Search */}
+      <div className="p-2 border-b border-border">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search subcategories…"
+          className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30"
+        />
+      </div>
+
+      {/* Subcategory options */}
       <div className="p-3 space-y-1.5">
-        {task.answers.map((ans) => (
-          <button
-            key={ans.id}
-            onClick={() => onSelectAnswer(ans.label)}
-            className={cn(
-              "w-full text-left px-3 py-2 rounded-lg border text-sm font-medium transition-colors",
-              pickedAnswer === ans.label && !isCustom
-                ? "bg-brand/10 border-brand/40 text-foreground"
-                : "bg-background border-border text-foreground hover:bg-muted",
-            )}
-          >
-            {pickedAnswer === ans.label && !isCustom && <Check className="inline h-3 w-3 mr-1.5 text-foreground" />}
-            {ans.label}
-          </button>
-        ))}
+        {subs.length === 0 && (
+          <p className="px-1 py-2 text-center text-xs text-muted-foreground">No subcategories match.</p>
+        )}
+        {subs.map((ans) => {
+          const used = usedAnswers.includes(ans.label);
+          const isSelected = pickedAnswer === ans.label && !isCustom;
+          return (
+            <button
+              key={ans.id}
+              type="button"
+              disabled={used}
+              onClick={() => onSelectAnswer(ans.label)}
+              className={cn(
+                "w-full flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg border text-sm font-medium transition-colors",
+                used
+                  ? "bg-muted/50 border-border text-muted-foreground opacity-60 cursor-not-allowed"
+                  : isSelected
+                    ? "bg-brand/10 border-brand/40 text-foreground"
+                    : "bg-background border-border text-foreground hover:bg-muted",
+              )}
+            >
+              <span className="truncate">
+                {isSelected && <Check className="inline h-3 w-3 mr-1.5 text-foreground" />}
+                {ans.label}
+              </span>
+              {used && <span className="text-[10px] uppercase tracking-wide shrink-0">Added</span>}
+            </button>
+          );
+        })}
 
         {/* Other (custom) */}
         <button
@@ -1277,13 +1495,18 @@ function AnswerPicker({
         </button>
 
         {isCustom && (
-          <input
-            autoFocus
-            value={customAnswer}
-            onChange={(e) => onCustomChange(e.target.value)}
-            placeholder="Describe what you did…"
-            className="w-full px-3 py-2 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40"
-          />
+          <>
+            <input
+              autoFocus
+              value={customAnswer}
+              onChange={(e) => onCustomChange(e.target.value)}
+              placeholder="Describe what you did…"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40"
+            />
+            {customDuplicate && (
+              <p className="text-[11px] text-destructive">This activity is already added for this task.</p>
+            )}
+          </>
         )}
 
         {/* Hours */}

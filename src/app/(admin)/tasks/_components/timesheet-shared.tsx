@@ -20,7 +20,7 @@ import type { LeaveType } from "../leave";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type LocalEntry = { taskId: number; answer: string; hours: number };
+export type LocalEntry = { taskId: number; category: string; answer: string; hours: number };
 export type LocalDay = {
   halfDay: boolean;
   onLeave: boolean;
@@ -133,7 +133,7 @@ export function buildServerMap(data: TasksPageData): Map<string, LocalDay> {
   const byDate = new Map<string, LocalEntry[]>();
   data.entries.forEach((e) => {
     if (!byDate.has(e.date)) byDate.set(e.date, []);
-    byDate.get(e.date)!.push({ taskId: e.taskId, answer: e.answer, hours: e.hours });
+    byDate.get(e.date)!.push({ taskId: e.taskId, category: e.category, answer: e.answer, hours: e.hours });
   });
   const allDates = new Set([...byDate.keys(), ...data.dayMetas.map((m) => m.date)]);
   allDates.forEach((date) => {
@@ -358,7 +358,9 @@ export function ReadOnlyTaskRow({ task, entry }: { task: TaskForPicker; entry: L
       <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
       <div className="flex-1 min-w-0">
         <div className="text-[13.5px] font-semibold text-foreground truncate">{task.name}</div>
-        <div className="text-[11px] text-muted-foreground truncate">{entry.answer}</div>
+        <div className="text-[11px] text-muted-foreground truncate">
+          {entry.category ? `${entry.category} · ${entry.answer}` : entry.answer}
+        </div>
       </div>
       <span className="text-sm font-semibold tabular-nums text-muted-foreground shrink-0">
         {fmtHrs(entry.hours)}

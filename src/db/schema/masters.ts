@@ -73,11 +73,26 @@ export const taskMaster = pgTable("task_master", {
   isActive: boolean("is_active").default(true).notNull(),
 });
 
-export const taskAnswerOption = pgTable("task_answer_option", {
+// Task → Category → SubCategory. Restrictions apply at both category and
+// subcategory level: a subcategory is visible only if both levels allow the
+// user's branch AND designation (null/empty array = all).
+export const taskCategory = pgTable("task_category", {
   id: serial("id").primaryKey(),
   taskId: integer("task_id")
     .notNull()
     .references(() => taskMaster.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  designations: text("designations").array(),
+  branches: text("branches").array(),
+});
+
+// A subcategory (the leaf a user logs hours against). `label` is its name.
+export const taskAnswerOption = pgTable("task_answer_option", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id")
+    .notNull()
+    .references(() => taskCategory.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
   designations: text("designations").array(), // null = all designations
@@ -102,7 +117,8 @@ export const taskEntry = pgTable(
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
     taskId: integer("task_id").notNull().references(() => taskMaster.id, { onDelete: "cascade" }),
-    answer: text("answer").notNull(),
+    category: text("category"), // denormalized category name (null on pre-category rows)
+    answer: text("answer").notNull(), // subcategory name
     hours: real("hours").notNull(),
   },
   (table) => [index("te_userId_date_idx").on(table.userId, table.date)],

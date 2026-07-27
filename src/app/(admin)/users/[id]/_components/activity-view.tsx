@@ -245,10 +245,10 @@ export function ActivityView({
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {selectedDay.entries.map((entry) => {
+                    {selectedDay.entries.map((entry, i) => {
                       const task = data.tasks.find((t) => t.id === entry.taskId);
                       if (!task) return null;
-                      return <ReadOnlyTaskRow key={entry.taskId} task={task} entry={entry} />;
+                      return <ReadOnlyTaskRow key={`${entry.taskId}::${entry.answer}::${i}`} task={task} entry={entry} />;
                     })}
                   </div>
                 )}
