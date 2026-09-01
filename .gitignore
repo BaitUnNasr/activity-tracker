@@ -36,3 +36,11 @@ pnpm-debug.log*
 next-env.d.ts
 .claude/settings.local.json
 .env
+
+# editor
+.vscode/
+
+# source data for one-off imports — never commit these: anything under public/
+# is served at the site root, and the legacy dump holds staff credentials.
+/public/*.xlsx
+/public/*.sql

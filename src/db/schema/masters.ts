@@ -75,7 +75,10 @@ export const taskMaster = pgTable("task_master", {
 
 // Task → Category → SubCategory. Restrictions apply at both category and
 // subcategory level: a subcategory is visible only if both levels allow the
-// user's branch AND designation (null/empty array = all).
+// user. Within one level, `employees` is an override — when it is set the row
+// belongs to exactly those users and branch/designation are ignored for it;
+// otherwise the user's branch AND designation must both be allowed
+// (null/empty array = all).
 export const taskCategory = pgTable("task_category", {
   id: serial("id").primaryKey(),
   taskId: integer("task_id")
@@ -85,6 +88,9 @@ export const taskCategory = pgTable("task_category", {
   sortOrder: integer("sort_order").default(0).notNull(),
   designations: text("designations").array(),
   branches: text("branches").array(),
+  // user.id values. No FK — Postgres cannot reference from inside an array, so
+  // ids of deleted users are pruned on read instead.
+  employees: text("employees").array(),
 });
 
 // A subcategory (the leaf a user logs hours against). `label` is its name.
@@ -97,6 +103,7 @@ export const taskAnswerOption = pgTable("task_answer_option", {
   sortOrder: integer("sort_order").default(0).notNull(),
   designations: text("designations").array(), // null = all designations
   branches: text("branches").array(), // null = all branches
+  employees: text("employees").array(), // null = not assigned to named users
 });
 
 export const scheduleMaster = pgTable("schedule_master", {

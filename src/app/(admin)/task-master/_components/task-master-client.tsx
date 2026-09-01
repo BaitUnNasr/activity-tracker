@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ import {
   updateSubcategory,
   updateTask,
   type Category,
+  type Employee,
   type SubCategory,
   type TaskRow,
 } from "../actions";
@@ -62,18 +64,28 @@ const DESIGNATION_META = [
 const DESIGNATIONS = DESIGNATION_META.map((d) => d.name);
 
 const BRANCH_CHIP = { chip: "bg-teal-500/10 border-teal-500/30 text-teal-600 dark:text-teal-400", dot: "bg-teal-500" } as const;
+const EMPLOYEE_CHIP = { chip: "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400", dot: "bg-rose-500" } as const;
 
 function designationChip(name: string) {
   return DESIGNATION_META.find((d) => d.name === name);
 }
 
-type Restr = { designations: string[] | null; branches: string[] | null };
+type Restr = { designations: string[] | null; branches: string[] | null; employees: string[] | null };
 // Would a user with the given designation/branch see this restricted item?
-// Empty filter dimension = "any".
+// Empty filter dimension = "any". An item assigned to named employees belongs
+// to exactly those people, so no branch/designation preview includes it.
 function allows(r: Restr, desig: string, branch: string): boolean {
+  if (r.employees?.length) return !desig && !branch;
   const dOk = !desig || !r.designations?.length || r.designations.includes(desig);
   const bOk = !branch || !r.branches?.length || r.branches.includes(branch);
   return dOk && bOk;
+}
+
+// Label for an assigned user id. Names repeat across staff, so the employee
+// code disambiguates; ids of deleted users fall back to a placeholder.
+function employeeLabel(id: string, byId: Map<string, Employee>): string {
+  const e = byId.get(id);
+  return e ? `${e.name} (${e.employeeCode})` : "Unknown employee";
 }
 
 // ─── Modal target types ───────────────────────────────────────────────────────
@@ -84,8 +96,17 @@ type PendingDelete = { kind: "task" | "category" | "subcategory"; id: number; na
 
 // ─── Main Client ──────────────────────────────────────────────────────────────
 
-export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: TaskRow[]; branchNames: string[] }) {
+export function TaskMasterClient({
+  initialTasks,
+  branchNames,
+  employees,
+}: {
+  initialTasks: TaskRow[];
+  branchNames: string[];
+  employees: Employee[];
+}) {
   const router = useRouter();
+  const employeesById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const [, startTransition] = useTransition();
 
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(initialTasks[0]?.id ?? null);
@@ -242,6 +263,7 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
           <CategoryPanel
             task={selectedTask}
             branchNames={branchNames}
+            employeesById={employeesById}
             onAddCategory={() => setCatModal({ mode: "add", taskId: selectedTask.id })}
             onEditCategory={(category) => setCatModal({ mode: "edit", taskId: selectedTask.id, category })}
             onDeleteCategory={(id, name) => setPendingDelete({ kind: "category", id, name })}
@@ -259,13 +281,14 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
           title={catModal.mode === "add" ? "Add category" : "Edit category"}
           fieldLabel="Category name"
           branchNames={branchNames}
+          employees={employees}
           initial={catModal.mode === "edit" ? catModal.category : undefined}
           onClose={() => setCatModal(null)}
-          onSave={async (name, designations, branches) => {
+          onSave={async (name, designations, branches, assigned) => {
             await run(
               () => catModal.mode === "add"
-                ? createCategory(catModal.taskId, name, designations, branches)
-                : updateCategory(catModal.category.id, name, designations, branches),
+                ? createCategory(catModal.taskId, name, designations, branches, assigned)
+                : updateCategory(catModal.category.id, name, designations, branches, assigned),
               catModal.mode === "add" ? "Category added." : "Category updated.",
             );
             setCatModal(null);
@@ -278,13 +301,14 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
           title={subModal.mode === "add" ? "Add subcategory" : "Edit subcategory"}
           fieldLabel="Subcategory name"
           branchNames={branchNames}
-          initial={subModal.mode === "edit" ? { name: subModal.sub.label, designations: subModal.sub.designations, branches: subModal.sub.branches } : undefined}
+          employees={employees}
+          initial={subModal.mode === "edit" ? { name: subModal.sub.label, designations: subModal.sub.designations, branches: subModal.sub.branches, employees: subModal.sub.employees } : undefined}
           onClose={() => setSubModal(null)}
-          onSave={async (name, designations, branches) => {
+          onSave={async (name, designations, branches, assigned) => {
             await run(
               () => subModal.mode === "add"
-                ? createSubcategory(subModal.categoryId, name, designations, branches)
-                : updateSubcategory(subModal.sub.id, name, designations, branches),
+                ? createSubcategory(subModal.categoryId, name, designations, branches, assigned)
+                : updateSubcategory(subModal.sub.id, name, designations, branches, assigned),
               subModal.mode === "add" ? "Subcategory added." : "Subcategory updated.",
             );
             setSubModal(null);
@@ -306,7 +330,20 @@ export function TaskMasterClient({ initialTasks, branchNames }: { initialTasks: 
 
 // ─── Restriction chips ────────────────────────────────────────────────────────
 
-function RestrictionChips({ r }: { r: Restr }) {
+function RestrictionChips({ r, employeesById }: { r: Restr; employeesById: Map<string, Employee> }) {
+  // An assignment overrides the other two dimensions, so showing branch and
+  // designation alongside it would misrepresent who actually sees the item.
+  if (r.employees?.length) {
+    return (
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        {r.employees.map((id) => (
+          <span key={id} className={cn("inline-flex items-center gap-1 px-1.5 rounded-full border text-[10px] font-medium", EMPLOYEE_CHIP.chip)}>
+            <UserRound className="h-2.5 w-2.5" />{employeeLabel(id, employeesById)}
+          </span>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-1 mt-0.5">
       {r.designations?.length ? r.designations.map((d) => {
@@ -329,10 +366,11 @@ function RestrictionChips({ r }: { r: Restr }) {
 // ─── Category panel ───────────────────────────────────────────────────────────
 
 function CategoryPanel({
-  task, branchNames, onAddCategory, onEditCategory, onDeleteCategory, onAddSub, onEditSub, onDeleteSub,
+  task, branchNames, employeesById, onAddCategory, onEditCategory, onDeleteCategory, onAddSub, onEditSub, onDeleteSub,
 }: {
   task: TaskRow;
   branchNames: string[];
+  employeesById: Map<string, Employee>;
   onAddCategory: () => void;
   onEditCategory: (c: Category) => void;
   onDeleteCategory: (id: number, name: string) => void;
@@ -366,7 +404,7 @@ function CategoryPanel({
           <AccordionTrigger className="py-3.5 hover:no-underline">
             <div className="min-w-0 text-left">
               <p className="text-sm font-bold text-foreground truncate">{c.name}</p>
-              <RestrictionChips r={c} />
+              <RestrictionChips r={c} employeesById={employeesById} />
             </div>
           </AccordionTrigger>
         </div>
@@ -382,7 +420,7 @@ function CategoryPanel({
             <li key={s.id} className="group/sub flex items-start gap-2 rounded-lg px-2 py-1.5 border border-transparent transition-colors hover:border-border hover:bg-muted/50">
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-medium text-foreground truncate mb-0!">{s.label}</p>
-                <RestrictionChips r={s} />
+                <RestrictionChips r={s} employeesById={employeesById} />
               </div>
               <div className="flex items-center gap-0.5 shrink-0 opacity-100 sm:opacity-0 sm:group-hover/sub:opacity-100 transition-opacity">
                 <Button variant="ghost" size="icon-xs" onClick={() => onEditSub(c.id, s)} className="text-muted-foreground hover:text-foreground"><Pencil className="h-3 w-3" /></Button>
@@ -486,10 +524,10 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
 
 // ─── Modal shell ──────────────────────────────────────────────────────────────
 
-function ModalShell({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+function ModalShell({ onClose, wide, children }: { onClose: () => void; wide?: boolean; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl w-full max-w-sm shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+      <div className={cn("bg-card rounded-2xl w-full shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 duration-200", wide ? "max-w-md" : "max-w-sm")} onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>
@@ -499,19 +537,21 @@ function ModalShell({ onClose, children }: { onClose: () => void; children: Reac
 // ─── Restriction modal (category & subcategory) ───────────────────────────────
 
 function RestrictionModal({
-  title, fieldLabel, branchNames, initial, onClose, onSave,
+  title, fieldLabel, branchNames, employees, initial, onClose, onSave,
 }: {
   title: string;
   fieldLabel: string;
   branchNames: string[];
-  initial?: { name: string; designations: string[] | null; branches: string[] | null };
+  employees: Employee[];
+  initial?: { name: string; designations: string[] | null; branches: string[] | null; employees: string[] | null };
   onClose: () => void;
-  onSave: (name: string, designations: string[] | null, branches: string[] | null) => Promise<void>;
+  onSave: (name: string, designations: string[] | null, branches: string[] | null, employees: string[] | null) => Promise<void>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(initial?.name ?? "");
   const [designations, setDesignations] = useState<string[]>(initial?.designations ?? []);
   const [branches, setBranches] = useState<string[]>(initial?.branches ?? []);
+  const [assigned, setAssigned] = useState<string[]>(initial?.employees ?? []);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = (list: string[], set: (v: string[]) => void, v: string) =>
@@ -522,26 +562,33 @@ function RestrictionModal({
     if (!name.trim() || isPending) return;
     setError(null);
     startTransition(async () => {
-      try { await onSave(name.trim(), designations.length ? designations : null, branches.length ? branches : null); }
+      try {
+        await onSave(
+          name.trim(),
+          designations.length ? designations : null,
+          branches.length ? branches : null,
+          assigned.length ? assigned : null,
+        );
+      }
       catch { setError("Something went wrong"); }
     });
   };
 
   return (
-    <ModalShell onClose={onClose}>
+    <ModalShell onClose={onClose} wide>
       <form onSubmit={submit}>
         <div className="flex items-start justify-between px-6 py-5 border-b border-border">
           <h3 className="text-xl font-bold tracking-tight text-foreground">{title}</h3>
           <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} className="rounded-full text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></Button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
           <label className="block">
             <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-1.5">{fieldLabel}</span>
             <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Passbook" className="rounded-xl bg-muted border-border focus-visible:ring-brand/30" />
           </label>
 
-          <div>
+          <div className={cn(assigned.length > 0 && "opacity-50")}>
             <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Designations</span>
             <div className="flex flex-wrap gap-1.5">
               {DESIGNATION_META.map(({ name: dn, chip, dot }) => {
@@ -557,7 +604,7 @@ function RestrictionModal({
             <p className="text-xs text-muted-foreground mt-2">{designations.length === 0 ? "No selection — all designations." : `Applies to: ${designations.join(", ")}.`}</p>
           </div>
 
-          <div>
+          <div className={cn(assigned.length > 0 && "opacity-50")}>
             <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase block mb-2">Branches</span>
             <div className="flex flex-wrap gap-1.5">
               {branchNames.map((bn) => {
@@ -575,6 +622,13 @@ function RestrictionModal({
             </p>
           </div>
 
+          <EmployeePicker
+            employees={employees}
+            assigned={assigned}
+            onToggle={(id) => toggle(assigned, setAssigned, id)}
+            onClear={() => setAssigned([])}
+          />
+
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 
@@ -587,6 +641,103 @@ function RestrictionModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+// ─── Employee picker ──────────────────────────────────────────────────────────
+// Assigning named employees overrides the designation/branch rules for this
+// row. Only active staff are offered, but anyone already assigned stays listed
+// so a deactivated user's assignment is visible rather than silently dropped.
+
+function EmployeePicker({
+  employees, assigned, onToggle, onClear,
+}: {
+  employees: Employee[];
+  assigned: string[];
+  onToggle: (id: string) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState("");
+
+  const selectable = useMemo(() => {
+    const chosen = new Set(assigned);
+    return employees.filter((e) => e.isActive || chosen.has(e.id));
+  }, [employees, assigned]);
+
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? selectable.filter(
+        (e) =>
+          e.name.toLowerCase().includes(q) ||
+          e.employeeCode.toLowerCase().includes(q) ||
+          (e.branch ?? "").toLowerCase().includes(q),
+      )
+    : selectable;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-semibold text-muted-foreground tracking-widest uppercase">Assigned employees</span>
+        {assigned.length > 0 && (
+          <Button type="button" variant="ghost" onClick={onClear} className="h-auto py-0.5 px-2 text-[11px] text-muted-foreground hover:text-foreground rounded-full">
+            Clear
+          </Button>
+        )}
+      </div>
+
+      <div className="relative mb-2">
+        <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name, code or branch…"
+          className="pl-8 rounded-xl bg-muted border-border text-sm h-9 focus-visible:ring-brand/30"
+        />
+      </div>
+
+      <div className="max-h-48 overflow-y-auto rounded-xl border border-border divide-y divide-border/60">
+        {shown.length === 0 ? (
+          <p className="px-3 py-4 text-xs text-muted-foreground text-center">No matching employees.</p>
+        ) : (
+          shown.map((e) => {
+            const active = assigned.includes(e.id);
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => onToggle(e.id)}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors",
+                  active ? "bg-rose-500/10" : "hover:bg-muted/60",
+                )}
+              >
+                <span className={cn(
+                  "h-4 w-4 shrink-0 rounded border grid place-items-center",
+                  active ? "bg-rose-500 border-rose-500 text-white" : "border-border bg-background",
+                )}>
+                  {active && <Check className="h-3 w-3" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium text-foreground truncate">
+                    {e.name}
+                    {!e.isActive && <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(inactive)</span>}
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground truncate">
+                    {e.employeeCode}{e.branch ? ` · ${e.branch}` : ""}
+                  </span>
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      <p className="text-xs text-muted-foreground mt-2">
+        {assigned.length === 0
+          ? "Not assigned — visibility follows the designation and branch rules above."
+          : `Only these ${assigned.length} employee${assigned.length === 1 ? "" : "s"} will see this. Designation and branch are ignored while an assignment is set.`}
+      </p>
+    </div>
   );
 }
 

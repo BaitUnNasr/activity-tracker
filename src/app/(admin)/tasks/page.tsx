@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getSessionUser } from "@/src/lib/session";
-import { fetchTasksPageData } from "./actions";
+import { fetchTasksPageData } from "./data";
 import { TaskInputClient } from "./_components/task-input-client";
 
 function getToday(): string {
@@ -25,7 +25,7 @@ export default async function TasksPage() {
 
   return (
     <div className="mt-6">
-      <TaskInputClient userId={sessionUser.id} today={today} initialData={data} />
+      <TaskInputClient today={today} initialData={data} />
     </div>
   );
 }

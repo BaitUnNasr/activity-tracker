@@ -5,50 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1779738523775,
-      "tag": "0000_strong_rattler",
+      "when": 1785700849200,
+      "tag": "0000_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1779823377008,
-      "tag": "0001_fine_madame_hydra",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1779825806363,
-      "tag": "0002_known_ikaris",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1779986248965,
-      "tag": "0003_familiar_la_nuit",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1748700000000,
-      "tag": "0004_task_entries",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1748800000000,
-      "tag": "0005_leave_option",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1748900000000,
-      "tag": "0006_backdate_permission",
+      "when": 1788015479391,
+      "tag": "0001_task_employee_assignment",
       "breakpoints": true
     }
   ]

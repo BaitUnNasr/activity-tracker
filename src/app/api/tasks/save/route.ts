@@ -27,7 +27,6 @@ export async function POST(req: Request) {
   if (!body.date) return NextResponse.json({ success: false, message: "Missing date" }, { status: 400 });
 
   const result = await saveDay(
-    user.id,
     body.date,
     !!body.halfDay,
     !!body.onLeave,

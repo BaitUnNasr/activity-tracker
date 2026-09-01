@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
+import { getAdminUser } from "@/src/lib/access";
 import { db } from "@/src/db/client";
 import { scheduleMaster } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
@@ -18,6 +20,9 @@ export type ScheduleRow = {
 export type ActionResult = { success: true } | { success: false; message: string };
 export type CreateResult = { success: true; id: number } | { success: false; message: string };
 
+// The failure shape alone, so it satisfies both ActionResult and CreateResult.
+const DENIED: { success: false; message: string } = { success: false, message: "Not authorized" };
+
 // Sorts after every real date, so a null (open-ended) end behaves as +infinity.
 const OPEN_END = "9999-12-31";
 
@@ -27,6 +32,7 @@ function todayStr(): string {
 }
 
 export async function fetchSchedules(): Promise<ScheduleRow[]> {
+  if (!(await getAdminUser())) redirect("/dashboard");
   const rows = await db
     .select()
     .from(scheduleMaster)
@@ -62,6 +68,7 @@ async function findOverlapping(
 }
 
 export async function createSchedule(input: Omit<ScheduleRow, "id">): Promise<CreateResult> {
+  if (!(await getAdminUser())) return DENIED;
   if (input.endDate !== null && input.endDate < input.startDate) {
     return { success: false, message: "End date must be on or after start date" };
   }
@@ -99,6 +106,7 @@ export async function updateSchedule(
   id: number,
   patch: Partial<Omit<ScheduleRow, "id">>,
 ): Promise<ActionResult> {
+  if (!(await getAdminUser())) return DENIED;
   const [current] = await db
     .select({ startDate: scheduleMaster.startDate, endDate: scheduleMaster.endDate })
     .from(scheduleMaster)
@@ -142,6 +150,7 @@ export async function updateSchedule(
 }
 
 export async function deleteSchedule(id: number): Promise<ActionResult> {
+  if (!(await getAdminUser())) return DENIED;
   try {
     await db.delete(scheduleMaster).where(eq(scheduleMaster.id, id));
     revalidatePath("/schedule");

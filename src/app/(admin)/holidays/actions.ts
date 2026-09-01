@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
+import { getAdminUser } from "@/src/lib/access";
 import { db } from "@/src/db/client";
 import { holidayMaster } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
@@ -17,7 +19,10 @@ export type ActionResult =
   | { success: true }
   | { success: false; message: string };
 
+const DENIED: ActionResult = { success: false, message: "Not authorized" };
+
 export async function fetchHolidays(): Promise<HolidayRow[]> {
+  if (!(await getAdminUser())) redirect("/dashboard");
   return db
     .select({
       id: holidayMaster.id,
@@ -34,6 +39,7 @@ export async function createHoliday(input: {
   startDate: string;
   endDate: string;
 }): Promise<ActionResult> {
+  if (!(await getAdminUser())) return DENIED;
   try {
     await db.insert(holidayMaster).values({
       name: input.name,
@@ -48,6 +54,7 @@ export async function createHoliday(input: {
 }
 
 export async function deleteHoliday(id: number): Promise<ActionResult> {
+  if (!(await getAdminUser())) return DENIED;
   try {
     await db.delete(holidayMaster).where(eq(holidayMaster.id, id));
     revalidatePath("/holidays");

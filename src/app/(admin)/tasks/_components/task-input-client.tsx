@@ -55,11 +55,9 @@ import {
 // ─── Main client ──────────────────────────────────────────────────────────────
 
 export function TaskInputClient({
-  userId,
   today,
   initialData,
 }: {
-  userId: string;
   today: string;
   initialData: TasksPageData;
 }) {
@@ -108,7 +106,7 @@ export function TaskInputClient({
     return () => {
       const { isDirty: dirty, selected: sel, localDay: day } = stateRef.current;
       if (dirty) {
-        saveDay(userId, sel, day.halfDay, day.onLeave, day.leaveType, day.entries);
+        saveDay(sel, day.halfDay, day.onLeave, day.leaveType, day.entries);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,7 +121,7 @@ export function TaskInputClient({
       const date = selected;
       setIsDirty(false); // this batch is now being saved; new edits re-arm the timer
       setAutoSaveState("saving");
-      runSave(() => saveDay(userId, date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries))
+      runSave(() => saveDay(date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries))
         .then((result) => {
           if (result.success) {
             setServerMap((prev) => new Map(prev).set(date, snapshot));
@@ -140,8 +138,7 @@ export function TaskInputClient({
         });
     }, 1500);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, localDay, selected, userId]);
+  }, [isDirty, localDay, selected]);
 
   // (2) Flush pending changes when the tab is hidden or closed. keepalive lets the
   // request outlive page teardown, which the unmount effect above cannot guarantee.
@@ -225,7 +222,7 @@ export function TaskInputClient({
     if (isDirty) {
       const snapshot = { ...localDay };
       const fromDate = selected;
-      runSave(() => saveDay(userId, fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries)).then((result) => {
+      runSave(() => saveDay(fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries)).then((result) => {
         if (result.success) {
           setServerMap((prev) => new Map(prev).set(fromDate, snapshot));
         } else {
@@ -310,7 +307,7 @@ export function TaskInputClient({
       // Upcoming (non-editable) leave day: revoke this date directly.
       const date = selected;
       setConfirmLeave(false);
-      runSave(() => revokeLeaveDate(userId, date)).then((res) => {
+      runSave(() => revokeLeaveDate(date)).then((res) => {
         if (!res.success) {
           toast.error(res.message);
           return;
@@ -334,7 +331,7 @@ export function TaskInputClient({
 
     // Earned-leave range: one record per working day.
     setConfirmLeave(false);
-    runSave(() => applyEarnedLeave(userId, result.from, result.to)).then((res) => {
+    runSave(() => applyEarnedLeave(result.from, result.to)).then((res) => {
       if (!res.success) {
         toast.error(res.message);
         return;

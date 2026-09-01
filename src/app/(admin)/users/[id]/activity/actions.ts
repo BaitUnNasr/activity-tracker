@@ -17,7 +17,8 @@ import {
 import { getSessionUser } from "@/src/lib/session";
 import { canViewUserActivity } from "@/src/lib/access";
 import { getErrorMessage } from "@/src/lib/utils";
-import { fetchTasksPageData, type TasksPageData } from "../../../tasks/actions";
+import { fetchTasksPageData } from "../../../tasks/data";
+import type { TasksPageData } from "../../../tasks/actions";
 
 export type ActivityTarget = {
   id: string;

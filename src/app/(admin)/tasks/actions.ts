@@ -1,18 +1,16 @@
 "use server";
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
+import { getSessionUser } from "@/src/lib/session";
 import { db } from "@/src/db/client";
 import {
   backdatePermission,
   holidayMaster,
-  scheduleMaster,
-  taskAnswerOption,
-  taskCategory,
   taskDayMeta,
   taskEntry,
-  taskMaster,
 } from "@/src/db/schema";
 import { LEAVE_TYPES, type LeaveType } from "./leave";
 
@@ -58,90 +56,6 @@ export type TasksPageData = {
   backdateDates: string[];
 };
 
-// ─── Fetch ────────────────────────────────────────────────────────────────────
-
-export async function fetchTasksPageData(
-  userId: string,
-  designation: string | null,
-  branch: string | null,
-  userType: "F" | "T",
-  today: string,
-): Promise<TasksPageData> {
-  const [allTasks, allCategories, allSubs, holidays, schedules, entriesRaw, dayMetasRaw, backdateRaw] =
-    await Promise.all([
-      db.select().from(taskMaster).where(eq(taskMaster.isActive, true)).orderBy(asc(taskMaster.id)),
-      db.select().from(taskCategory).orderBy(asc(taskCategory.sortOrder), asc(taskCategory.id)),
-      db.select().from(taskAnswerOption).orderBy(asc(taskAnswerOption.sortOrder), asc(taskAnswerOption.id)),
-      db.select({
-        name: holidayMaster.name,
-        startDate: holidayMaster.startDate,
-        endDate: holidayMaster.endDate,
-      }).from(holidayMaster),
-      db.select().from(scheduleMaster),
-      db.select().from(taskEntry).where(eq(taskEntry.userId, userId)),
-      db.select().from(taskDayMeta).where(eq(taskDayMeta.userId, userId)),
-      db.select({ date: backdatePermission.date }).from(backdatePermission).where(eq(backdatePermission.userId, userId)),
-    ]);
-
-  // A restriction allows the user when its designation and branch lists each
-  // either cover the user or are unset (all). Both category and subcategory
-  // must allow for a subcategory to be visible.
-  const allows = (r: { designations: string[] | null; branches: string[] | null }) => {
-    const designationOk = !r.designations?.length || (designation !== null && r.designations.includes(designation));
-    const branchOk = !r.branches?.length || (branch !== null && r.branches.includes(branch));
-    return designationOk && branchOk;
-  };
-
-  const visibleCategories = allCategories.filter(allows);
-
-  const tasks: TaskForPicker[] = allTasks
-    .map((t) => ({
-      id: t.id,
-      name: t.name,
-      categories: visibleCategories
-        .filter((c) => c.taskId === t.id)
-        .map((c) => ({
-          id: c.id,
-          name: c.name,
-          subcategories: allSubs
-            .filter((s) => s.categoryId === c.id && allows(s))
-            .map((s) => ({ id: s.id, label: s.label })),
-        }))
-        .filter((c) => c.subcategories.length > 0),
-    }))
-    .filter((t) => t.categories.length > 0);
-
-  // Daily target from the schedule that covers today (null end = open-ended)
-  const activeSchedule = schedules.find(
-    (s) => s.startDate <= today && (s.endDate === null || s.endDate >= today),
-  );
-  const dailyTarget = activeSchedule
-    ? userType === "F"
-      ? activeSchedule.fulltimeHours
-      : activeSchedule.traineeHours
-    : 7;
-
-  return {
-    tasks,
-    holidays,
-    dailyTarget,
-    entries: entriesRaw.map((e) => ({
-      date: e.date,
-      taskId: e.taskId,
-      category: e.category ?? "",
-      answer: e.answer,
-      hours: e.hours,
-    })),
-    dayMetas: dayMetasRaw.map((m) => ({
-      date: m.date,
-      halfDay: m.halfDay,
-      onLeave: m.onLeave,
-      leaveType: (m.leaveType as LeaveType | null) ?? null,
-    })),
-    backdateDates: backdateRaw.map((b) => b.date),
-  };
-}
-
 // ─── Save ─────────────────────────────────────────────────────────────────────
 
 export type SaveDayResult =
@@ -149,13 +63,17 @@ export type SaveDayResult =
   | { success: false; message: string };
 
 export async function saveDay(
-  userId: string,
   date: string,
   halfDay: boolean,
   onLeave: boolean,
   leaveType: LeaveType | null,
   entries: { taskId: number; category: string; answer: string; hours: number }[],
 ): Promise<SaveDayResult> {
+  const sessionUser = await getSessionUser(await headers());
+  if (!sessionUser) return { success: false, message: "Not signed in" };
+  const userId = sessionUser.id;
+
+  if (!DATE_RE.test(date)) return { success: false, message: "Invalid date" };
   if (onLeave && !LEAVE_TYPES.includes(leaveType as LeaveType)) {
     return { success: false, message: "Please choose a leave type" };
   }
@@ -260,10 +178,13 @@ async function hasBackdateGrant(userId: string, date: string): Promise<boolean> 
 // holidays) in [fromDate, toDate] is stored as its own task_day_meta row, so the
 // user can later revoke any individual date.
 export async function applyEarnedLeave(
-  userId: string,
   fromDate: string,
   toDate: string,
 ): Promise<ApplyLeaveResult> {
+  const sessionUser = await getSessionUser(await headers());
+  if (!sessionUser) return { success: false, message: "Not signed in" };
+  const userId = sessionUser.id;
+
   if (!DATE_RE.test(fromDate) || !DATE_RE.test(toDate)) {
     return { success: false, message: "Invalid date" };
   }
@@ -337,7 +258,11 @@ export async function applyEarnedLeave(
 
 // Revoke a single leave day (removes the meta row; any preserved task entries
 // for that date are left untouched and become visible again).
-export async function revokeLeaveDate(userId: string, date: string): Promise<SaveDayResult> {
+export async function revokeLeaveDate(date: string): Promise<SaveDayResult> {
+  const sessionUser = await getSessionUser(await headers());
+  if (!sessionUser) return { success: false, message: "Not signed in" };
+  const userId = sessionUser.id;
+
   if (!DATE_RE.test(date)) return { success: false, message: "Invalid date" };
   // Past-day leave can only be revoked with a backdate grant for that day.
   if (date < todayKey() && !(await hasBackdateGrant(userId, date))) {

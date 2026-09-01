@@ -1,3 +1,17 @@
+import { headers } from "next/headers";
+
+import { getSessionUser, type SessionUser } from "./session";
+
+// Editing master data — task master, holidays, schedule — is Admin-only.
+// Returns null for everyone else, so callers can deny instead of proceeding.
+// Every server action behind those pages must call this: route middleware only
+// proves who the caller is, and a server action is reachable directly by POST
+// regardless of which page rendered it.
+export async function getAdminUser(): Promise<SessionUser | null> {
+  const user = await getSessionUser(await headers());
+  return user?.designation === "Admin" ? user : null;
+}
+
 // Designation hierarchy: which designations each role may view/manage.
 // Empty array = Admin (sees everyone, across all branches).
 export const VISIBLE_DESIGNATIONS: Record<string, string[]> = {
