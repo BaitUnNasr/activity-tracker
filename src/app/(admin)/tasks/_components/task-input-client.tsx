@@ -353,12 +353,14 @@ export function TaskInputClient({
     const answer = isCustomAnswer ? customAnswer.trim() : pickedAnswer;
     if (!answer || pickedHours <= 0) return;
     const category = pickedCategory.name;
+    const taskName = initialData.tasks.find((t) => t.id === pickedTaskId)?.name;
+    if (!taskName) return;
     // A subcategory can only be logged once per task+category.
-    if (localDay.entries.some((e) => e.taskId === pickedTaskId && e.category === category && e.answer === answer)) {
+    if (localDay.entries.some((e) => e.task === taskName && e.category === category && e.answer === answer)) {
       toast.error("That subcategory is already added.");
       return;
     }
-    modify((c) => ({ ...c, entries: [...c.entries, { taskId: pickedTaskId, category, answer, hours: pickedHours }] }));
+    modify((c) => ({ ...c, entries: [...c.entries, { task: taskName, category, answer, hours: pickedHours }] }));
     setPickStep("none");
     setPickedTaskId(null);
     setPickedCategoryId(null);
@@ -368,13 +370,13 @@ export function TaskInputClient({
     setPickedHours(1);
   };
 
-  const handleRemove = (taskId: number, category: string, answer: string) =>
-    modify((c) => ({ ...c, entries: c.entries.filter((e) => !(e.taskId === taskId && e.category === category && e.answer === answer)) }));
+  const handleRemove = (task: string, category: string, answer: string) =>
+    modify((c) => ({ ...c, entries: c.entries.filter((e) => !(e.task === task && e.category === category && e.answer === answer)) }));
 
-  const handleHours = (taskId: number, category: string, answer: string, hours: number) =>
+  const handleHours = (task: string, category: string, answer: string, hours: number) =>
     modify((c) => ({
       ...c,
-      entries: c.entries.map((e) => (e.taskId === taskId && e.category === category && e.answer === answer ? { ...e, hours } : e)),
+      entries: c.entries.map((e) => (e.task === task && e.category === category && e.answer === answer ? { ...e, hours } : e)),
     }));
 
   const stepMonth = (dir: number) => {
@@ -397,7 +399,7 @@ export function TaskInputClient({
   // Subcategories already logged for the picked task+category (can't repeat).
   const usedAnswersForPicked = pickedCategory
     ? localDay.entries
-        .filter((e) => e.taskId === pickedTaskId && e.category === pickedCategory.name)
+        .filter((e) => e.task === pickedTask?.name && e.category === pickedCategory.name)
         .map((e) => e.answer)
     : [];
   const chosenAnswer = isCustomAnswer ? customAnswer.trim() : pickedAnswer;
@@ -570,7 +572,6 @@ export function TaskInputClient({
                 target={target}
                 halfDay={localDay.halfDay}
                 entries={localDay.entries}
-                tasks={initialData.tasks}
               />
 
               {/* Task list */}
@@ -607,23 +608,20 @@ export function TaskInputClient({
                       </div>
                     )}
                     {localDay.entries.map((entry) => {
-                      const task = initialData.tasks.find((t) => t.id === entry.taskId);
-                      if (!task) return null;
-                      const key = `${entry.taskId}::${entry.category}::${entry.answer}`;
+                      const key = `${entry.task}::${entry.category}::${entry.answer}`;
                       if (!isEditable) {
-                        return <ReadOnlyTaskRow key={key} task={task} entry={entry} />;
+                        return <ReadOnlyTaskRow key={key} entry={entry} />;
                       }
                       const otherHours = localDay.entries
-                        .filter((e) => !(e.taskId === entry.taskId && e.category === entry.category && e.answer === entry.answer))
+                        .filter((e) => !(e.task === entry.task && e.category === entry.category && e.answer === entry.answer))
                         .reduce((s, e) => s + e.hours, 0);
                       return (
                         <TaskRow
                           key={key}
-                          task={task}
                           entry={entry}
                           maxHours={Math.max(0.5, target - otherHours)}
-                          onHours={(h) => handleHours(entry.taskId, entry.category, entry.answer, h)}
-                          onRemove={() => handleRemove(entry.taskId, entry.category, entry.answer)}
+                          onHours={(h) => handleHours(entry.task, entry.category, entry.answer, h)}
+                          onRemove={() => handleRemove(entry.task, entry.category, entry.answer)}
                         />
                       );
                     })}
@@ -1135,10 +1133,10 @@ function HalfDayConfirmModal({
 // ─── Progress card ────────────────────────────────────────────────────────────
 
 function ProgressCard({
-  total, target, halfDay, entries, tasks,
+  total, target, halfDay, entries,
 }: {
   total: number; target: number; halfDay: boolean;
-  entries: LocalEntry[]; tasks: TaskForPicker[];
+  entries: LocalEntry[];
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((total / target) * 100));
   const over = total > target;
@@ -1203,20 +1201,20 @@ function ProgressCard({
         <div className="mt-4">
           <div className="relative h-3.5 rounded-full bg-muted border border-border overflow-hidden flex">
             {entries.map((e) => {
-              const taskName = tasks.find((t) => t.id === e.taskId)?.name ?? "Unknown";
+              const taskName = e.task;
               const w = (e.hours / max) * 100;
               return (
-                <TooltipProvider key={`${e.taskId}::${e.category}::${e.answer}`}>
+                <TooltipProvider key={`${e.task}::${e.category}::${e.answer}`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div
                         className="h-full border-r border-white/60 last:border-0 cursor-default"
-                        style={{ width: `${w}%`, background: taskColor(e.taskId) }}
+                        style={{ width: `${w}%`, background: taskColor(e.task) }}
                       />
                     </TooltipTrigger>
                     <TooltipContent side="top">
                       <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: taskColor(e.taskId) }} />
+                        <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: taskColor(e.task) }} />
                         <span>{taskName}{e.category ? ` · ${e.category}` : ""} · {e.answer}: {fmtHrs(e.hours)}</span>
                       </div>
                     </TooltipContent>
@@ -1239,9 +1237,9 @@ function ProgressCard({
 // ─── Task row ─────────────────────────────────────────────────────────────────
 
 function TaskRow({
-  task, entry, maxHours, onHours, onRemove,
+  entry, maxHours, onHours, onRemove,
 }: {
-  task: TaskForPicker; entry: LocalEntry; maxHours: number;
+  entry: LocalEntry; maxHours: number;
   onHours: (h: number) => void; onRemove: () => void;
 }) {
   const atMax = entry.hours >= maxHours;
@@ -1255,9 +1253,9 @@ function TaskRow({
       "flex items-center gap-3 px-3 py-2.5 border rounded-xl transition-colors",
       atMax ? "bg-brand/5 border-brand/25" : "bg-muted border-border",
     )}>
-      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
+      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(entry.task) }} />
       <div className="flex-1 min-w-0">
-        <div className="text-[13.5px] font-semibold text-foreground truncate">{task.name}</div>
+        <div className="text-[13.5px] font-semibold text-foreground truncate">{entry.task}</div>
         <div className="text-[11px] text-muted-foreground truncate">
           {entry.category ? `${entry.category} · ${entry.answer}` : entry.answer}
         </div>
@@ -1329,7 +1327,7 @@ function TaskPicker({
               onClick={() => onPick(t.id)}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted transition-colors border-b border-border/50 last:border-0"
             >
-              <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(t.id) }} />
+              <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(t.name) }} />
               <span className="text-sm font-medium text-foreground flex-1 truncate">{t.name}</span>
               <span className="text-xs text-muted-foreground shrink-0">{t.categories.length} categories</span>
             </button>
@@ -1363,7 +1361,7 @@ function CategoryPicker({
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(task.name) }} />
           <span className="text-xs font-semibold text-foreground truncate">{task.name}</span>
         </div>
         <button onClick={onCancel} className="h-5 w-5 grid place-items-center rounded text-muted-foreground hover:text-foreground">
@@ -1430,7 +1428,7 @@ function AnswerPicker({
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: taskColor(task.name) }} />
           <span className="text-xs font-semibold text-foreground truncate">{task.name} · {category.name}</span>
         </div>
         <span className="text-[10px] text-muted-foreground uppercase tracking-widest shrink-0">Subcategory</span>

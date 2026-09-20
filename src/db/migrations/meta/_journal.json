@@ -15,6 +15,20 @@
       "when": 1788015479391,
       "tag": "0001_task_employee_assignment",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789935706425,
+      "tag": "0002_add_task_name_to_entry",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789935730376,
+      "tag": "0003_drop_task_id_from_entry",
+      "breakpoints": true
     }
   ]
 }

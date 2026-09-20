@@ -67,11 +67,16 @@ export const userBranchLink = pgTable(
   (table) => [index("ubl_userId_idx").on(table.userId)],
 );
 
-export const taskMaster = pgTable("task_master", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
-});
+export const taskMaster = pgTable(
+  "task_master",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+  },
+  // A logged entry records its task by name, so a name must identify one task.
+  (table) => [uniqueIndex("task_master_name_uniq").on(table.name)],
+);
 
 // Task → Category → SubCategory. Restrictions apply at both category and
 // subcategory level: a subcategory is visible only if both levels allow the
@@ -123,7 +128,10 @@ export const taskEntry = pgTable(
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
-    taskId: integer("task_id").notNull().references(() => taskMaster.id, { onDelete: "cascade" }),
+    // Task, category and answer are all stored as plain text rather than keys:
+    // an entry is a record of what was logged, so deleting or renaming master
+    // data must never rewrite or destroy somebody's history.
+    task: text("task").notNull(), // denormalized task name
     category: text("category"), // denormalized category name (null on pre-category rows)
     answer: text("answer").notNull(), // subcategory name
     hours: real("hours").notNull(),

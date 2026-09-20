@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     halfDay?: boolean;
     onLeave?: boolean;
     leaveType?: LeaveType | null;
-    entries?: { taskId: number; category: string; answer: string; hours: number }[];
+    entries?: { task: string; category: string; answer: string; hours: number }[];
   };
   try {
     body = await req.json();

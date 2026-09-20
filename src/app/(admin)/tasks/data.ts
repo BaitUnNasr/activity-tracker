@@ -93,7 +93,7 @@ export async function fetchTasksPageData(
     dailyTarget,
     entries: entriesRaw.map((e) => ({
       date: e.date,
-      taskId: e.taskId,
+      task: e.task,
       category: e.category ?? "",
       answer: e.answer,
       hours: e.hours,

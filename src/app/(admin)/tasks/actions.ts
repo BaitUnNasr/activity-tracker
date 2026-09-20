@@ -27,7 +27,7 @@ export type TaskForPicker = {
 
 export type EntryRow = {
   date: string;
-  taskId: number;
+  task: string;
   category: string;
   answer: string;
   hours: number;
@@ -67,7 +67,7 @@ export async function saveDay(
   halfDay: boolean,
   onLeave: boolean,
   leaveType: LeaveType | null,
-  entries: { taskId: number; category: string; answer: string; hours: number }[],
+  entries: { task: string; category: string; answer: string; hours: number }[],
 ): Promise<SaveDayResult> {
   const sessionUser = await getSessionUser(await headers());
   if (!sessionUser) return { success: false, message: "Not signed in" };
@@ -103,7 +103,7 @@ export async function saveDay(
           entries.map((e) => ({
             userId,
             date,
-            taskId: e.taskId,
+            task: e.task,
             category: e.category || null,
             answer: e.answer,
             hours: e.hours,

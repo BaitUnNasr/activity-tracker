@@ -21,6 +21,11 @@ import { cn } from "@/src/lib/utils";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/src/components/ui/popover";
+import {
   Card,
   CardAction,
   CardContent,
@@ -74,7 +79,19 @@ type Restr = { designations: string[] | null; branches: string[] | null; employe
 // Would a user with the given designation/branch see this restricted item?
 // Empty filter dimension = "any". An item assigned to named employees belongs
 // to exactly those people, so no branch/designation preview includes it.
-function allows(r: Restr, desig: string, branch: string): boolean {
+//
+// Picking one employee previews that person instead, and then it has to answer
+// the stricter question "what does this individual actually see?" — so it
+// mirrors the rule the timesheet itself uses in tasks/data.ts: a named
+// assignment wins outright, otherwise their branch and designation must both
+// allow. A person with no branch sees nothing branch-restricted.
+function allows(r: Restr, desig: string, branch: string, emp?: Employee | null): boolean {
+  if (emp) {
+    if (r.employees?.length) return r.employees.includes(emp.id);
+    const dOk = !r.designations?.length || (!!emp.designation && r.designations.includes(emp.designation));
+    const bOk = !r.branches?.length || (!!emp.branch && r.branches.includes(emp.branch));
+    return dOk && bOk;
+  }
   if (r.employees?.length) return !desig && !branch;
   const dOk = !desig || !r.designations?.length || r.designations.includes(desig);
   const bOk = !branch || !r.branches?.length || r.branches.includes(branch);
@@ -381,6 +398,10 @@ function CategoryPanel({
   const [query, setQuery] = useState("");
   const [fBranch, setFBranch] = useState("");
   const [fDesig, setFDesig] = useState("");
+  const [fEmpId, setFEmpId] = useState("");
+
+  const employees = useMemo(() => [...employeesById.values()], [employeesById]);
+  const fEmp = fEmpId ? employeesById.get(fEmpId) ?? null : null;
 
   // Search matches category or subcategory name; the branch/designation filter
   // keeps categories/subcategories a user with that scope would see (both levels).
@@ -389,10 +410,10 @@ function CategoryPanel({
   const q = trimmed.length >= 3 ? trimmed.toLowerCase() : "";
   const matches = (s: string) => !q || s.toLowerCase().includes(q);
   const visible = task.categories
-    .filter((c) => allows(c, fDesig, fBranch))
+    .filter((c) => allows(c, fDesig, fBranch, fEmp))
     .map((c) => {
       const catNameMatch = matches(c.name);
-      const subs = c.subcategories.filter((s) => allows(s, fDesig, fBranch) && (catNameMatch || matches(s.label)));
+      const subs = c.subcategories.filter((s) => allows(s, fDesig, fBranch, fEmp) && (catNameMatch || matches(s.label)));
       return { c, subs, show: catNameMatch || subs.length > 0 };
     })
     .filter((x) => x.show);
@@ -465,8 +486,21 @@ function CategoryPanel({
               className="pl-8 rounded-full bg-muted border-border text-sm h-8 focus-visible:ring-brand/30"
             />
           </div>
-          <FilterSelect label="Branch" value={fBranch} onChange={setFBranch} options={branchNames} />
-          <FilterSelect label="Designation" value={fDesig} onChange={setFDesig} options={DESIGNATIONS} />
+          <EmployeeFilter employees={employees} value={fEmpId} onChange={setFEmpId} />
+          {/* An employee carries their own branch and designation, so filtering
+              by both at once would only ever narrow to nothing useful. */}
+          <FilterSelect label="Branch" value={fBranch} onChange={setFBranch} options={branchNames} disabled={!!fEmp} />
+          <FilterSelect label="Designation" value={fDesig} onChange={setFDesig} options={DESIGNATIONS} disabled={!!fEmp} />
+        </div>
+      )}
+
+      {fEmp && (
+        <div className="px-4 py-2 border-b border-border bg-muted/40">
+          <p className="text-[11px] text-muted-foreground">
+            Showing what <span className="font-semibold text-foreground">{fEmp.name}</span> ({fEmp.employeeCode})
+            {" "}can log under this task
+            {fEmp.branch || fEmp.designation ? ` — ${[fEmp.branch, fEmp.designation].filter(Boolean).join(" · ")}` : " — no branch or designation assigned"}.
+          </p>
         </div>
       )}
 
@@ -508,10 +542,10 @@ function CategoryPanel({
 // Radix Select forbids empty-string values, so "all" uses a sentinel.
 const ALL = "__all__";
 
-function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
+function FilterSelect({ label, value, onChange, options, disabled }: { label: string; value: string; onChange: (v: string) => void; options: readonly string[]; disabled?: boolean }) {
   return (
-    <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? "" : v)}>
-      <SelectTrigger size="sm" className={cn("rounded-full text-xs bg-muted", value && "border-brand/40")}>
+    <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? "" : v)} disabled={disabled}>
+      <SelectTrigger size="sm" className={cn("rounded-full text-xs bg-muted", value && "border-brand/40", disabled && "opacity-50")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -519,6 +553,120 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
         {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
       </SelectContent>
     </Select>
+  );
+}
+
+// ─── Employee filter ──────────────────────────────────────────────────────────
+// A searchable single-select: the staff list runs to three figures, so a plain
+// dropdown is unusable. Inactive staff stay listed — an assignment made before
+// someone was deactivated is exactly what an admin needs to find.
+
+function EmployeeFilter({
+  employees, value, onChange,
+}: {
+  employees: Employee[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const selected = employees.find((e) => e.id === value) ?? null;
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? employees.filter(
+        (e) =>
+          e.name.toLowerCase().includes(q) ||
+          e.employeeCode.toLowerCase().includes(q) ||
+          (e.branch ?? "").toLowerCase().includes(q),
+      )
+    : employees;
+
+  const pick = (id: string) => {
+    onChange(id);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "rounded-full text-xs bg-muted gap-1.5 font-normal",
+            selected && "border-rose-500/40 text-foreground",
+          )}
+        >
+          <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="max-w-[140px] truncate">{selected ? selected.name : "All employees"}</span>
+          {selected ? (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label="Clear employee filter"
+              onClick={(e) => { e.stopPropagation(); onChange(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onChange(""); } }}
+              className="ml-0.5 rounded-full text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </span>
+          ) : (
+            <ChevronRight className="h-3 w-3 rotate-90 text-muted-foreground" />
+          )}
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent align="start" className="w-72 p-2">
+        <div className="relative mb-2">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, code or branch…"
+            className="pl-8 rounded-xl bg-muted border-border text-sm h-9 focus-visible:ring-brand/30"
+          />
+        </div>
+
+        <div className="max-h-56 overflow-y-auto rounded-xl border border-border divide-y divide-border/60">
+          <button
+            type="button"
+            onClick={() => pick("")}
+            className={cn("w-full px-3 py-2 text-left text-[13px] transition-colors", value ? "hover:bg-muted/60" : "bg-rose-500/10 font-medium")}
+          >
+            All employees
+          </button>
+          {shown.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-muted-foreground text-center">No matching employees.</p>
+          ) : (
+            shown.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => pick(e.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 text-left transition-colors",
+                  e.id === value ? "bg-rose-500/10" : "hover:bg-muted/60",
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium text-foreground truncate">
+                    {e.name}
+                    {!e.isActive && <span className="ml-1.5 text-[10px] text-muted-foreground">(inactive)</span>}
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground truncate">
+                    {[e.employeeCode, e.branch, e.designation].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+                {e.id === value && <Check className="h-3.5 w-3.5 shrink-0 text-rose-500" />}
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

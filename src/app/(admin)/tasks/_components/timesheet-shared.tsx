@@ -2,7 +2,7 @@
 
 import { CalendarDays, Check, ChevronLeft, ChevronRight } from "lucide-react";
 
-import { cn } from "@/src/lib/utils";
+import { cn, hashIndex } from "@/src/lib/utils";
 import { Button } from "@/src/components/ui/button";
 import {
   Card,
@@ -15,12 +15,12 @@ import {
 import { IconChip } from "@/src/components/page-ui";
 import { CalendarWeekToggle } from "@/src/components/calendar-week-toggle";
 import { useCollapsibleCalendar } from "@/src/hooks/use-collapsible-calendar";
-import type { TaskForPicker, TasksPageData } from "../actions";
+import type { TasksPageData } from "../actions";
 import type { LeaveType } from "../leave";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type LocalEntry = { taskId: number; category: string; answer: string; hours: number };
+export type LocalEntry = { task: string; category: string; answer: string; hours: number };
 export type LocalDay = {
   halfDay: boolean;
   onLeave: boolean;
@@ -112,8 +112,8 @@ export function fmtLong(s: string): string {
   });
 }
 
-export function taskColor(taskId: number): string {
-  return TASK_COLORS[(taskId - 1) % TASK_COLORS.length];
+export function taskColor(task: string): string {
+  return TASK_COLORS[hashIndex(task, TASK_COLORS.length)];
 }
 
 export function buildHolidayMap(holidays: { name: string; startDate: string; endDate: string }[]): Map<string, string> {
@@ -133,7 +133,7 @@ export function buildServerMap(data: TasksPageData): Map<string, LocalDay> {
   const byDate = new Map<string, LocalEntry[]>();
   data.entries.forEach((e) => {
     if (!byDate.has(e.date)) byDate.set(e.date, []);
-    byDate.get(e.date)!.push({ taskId: e.taskId, category: e.category, answer: e.answer, hours: e.hours });
+    byDate.get(e.date)!.push({ task: e.task, category: e.category, answer: e.answer, hours: e.hours });
   });
   const allDates = new Set([...byDate.keys(), ...data.dayMetas.map((m) => m.date)]);
   allDates.forEach((date) => {
@@ -352,12 +352,14 @@ export function DayBadge({ status }: { status: DayStatus }) {
 
 // ─── Read-only task row ──────────────────────────────────────────────────────
 
-export function ReadOnlyTaskRow({ task, entry }: { task: TaskForPicker; entry: LocalEntry }) {
+// Renders straight from the entry: it carries its own task name, so a row still
+// shows correctly after the task is deleted, renamed or hidden from this user.
+export function ReadOnlyTaskRow({ entry }: { entry: LocalEntry }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/50 border border-border/60 rounded-xl">
-      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(task.id) }} />
+      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(entry.task) }} />
       <div className="flex-1 min-w-0">
-        <div className="text-[13.5px] font-semibold text-foreground truncate">{task.name}</div>
+        <div className="text-[13.5px] font-semibold text-foreground truncate">{entry.task}</div>
         <div className="text-[11px] text-muted-foreground truncate">
           {entry.category ? `${entry.category} · ${entry.answer}` : entry.answer}
         </div>

@@ -9,7 +9,7 @@ import {
   Target,
 } from "lucide-react";
 
-import { cn } from "@/src/lib/utils";
+import { cn, hashIndex } from "@/src/lib/utils";
 import { Card, CardContent } from "@/src/components/ui/card";
 import type { PersonalDashboardData } from "../actions";
 import type { LeaveType } from "@/src/app/(admin)/tasks/leave";
@@ -54,8 +54,8 @@ const TASK_COLORS = [
 const TASK_STROKE_COLORS = [
   "#a3e635", "#0ea5e9", "#fbbf24", "#14b8a6", "#f97316", "#8b5cf6", "#ec4899",
 ];
-const taskColor = (id: number) => TASK_COLORS[id % TASK_COLORS.length];
-const taskStroke = (id: number) => TASK_STROKE_COLORS[id % TASK_STROKE_COLORS.length];
+const taskColor = (name: string) => TASK_COLORS[hashIndex(name, TASK_COLORS.length)];
+const taskStroke = (name: string) => TASK_STROKE_COLORS[hashIndex(name, TASK_STROKE_COLORS.length)];
 
 const ALL_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WORKING = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
@@ -201,7 +201,7 @@ function TodayProgressCard({
         ) : (
           <div className="flex gap-6 items-center flex-wrap sm:flex-nowrap">
             {/* Ring */}
-            <ProgressRing pct={pct} logged={todayTotal} target={target} taskColors={todayTasks.map((t) => taskStroke(t.taskId))} />
+            <ProgressRing pct={pct} logged={todayTotal} target={target} taskColors={todayTasks.map((t) => taskStroke(t.name))} />
 
             {/* Breakdown */}
             <div className="flex-1 min-w-0 w-full">
@@ -209,9 +209,9 @@ function TodayProgressCard({
               <div className="h-3.5 rounded-full bg-muted ring-1 ring-border overflow-hidden flex">
                 {todayTasks.map((t) => (
                   <div
-                    key={t.taskId}
+                    key={t.name}
                     title={t.name}
-                    className={cn("h-full", taskColor(t.taskId))}
+                    className={cn("h-full", taskColor(t.name))}
                     style={{ width: `${Math.min(100, (t.hours / target) * 100)}%` }}
                   />
                 ))}
@@ -235,8 +235,8 @@ function TodayProgressCard({
               ) : (
                 <ul className="divide-y divide-border/60">
                   {todayTasks.map((t) => (
-                    <li key={t.taskId} className="flex items-center gap-3 py-2.5">
-                      <span className={cn("w-2.5 h-2.5 rounded-[3px] shrink-0", taskColor(t.taskId))} />
+                    <li key={t.name} className="flex items-center gap-3 py-2.5">
+                      <span className={cn("w-2.5 h-2.5 rounded-[3px] shrink-0", taskColor(t.name))} />
                       <span className="flex-1 text-sm font-semibold text-foreground truncate">{t.name}</span>
                       <span className="text-sm font-bold text-foreground tabular-nums">{fmtHrs(t.hours)}</span>
                     </li>

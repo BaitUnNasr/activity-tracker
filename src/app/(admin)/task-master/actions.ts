@@ -7,11 +7,13 @@ import { getAdminUser } from "@/src/lib/access";
 import { db } from "@/src/db/client";
 import {
   branchMaster,
+  designationMaster,
   taskAnswerOption,
   taskCategory,
   taskMaster,
   user,
   userBranchLink,
+  userDesignationLink,
 } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
 
@@ -41,6 +43,7 @@ export type Employee = {
   name: string;
   employeeCode: string;
   branch: string | null;
+  designation: string | null;
   isActive: boolean;
 };
 
@@ -115,6 +118,7 @@ export async function fetchEmployees(): Promise<Employee[]> {
       name: user.name,
       employeeCode: user.employeeCode,
       branch: branchMaster.name,
+      designation: designationMaster.name,
       isActive: user.isActive,
     })
     .from(user)
@@ -123,6 +127,11 @@ export async function fetchEmployees(): Promise<Employee[]> {
       and(eq(userBranchLink.userId, user.id), isNull(userBranchLink.endDate)),
     )
     .leftJoin(branchMaster, eq(userBranchLink.branchId, branchMaster.id))
+    .leftJoin(
+      userDesignationLink,
+      and(eq(userDesignationLink.userId, user.id), isNull(userDesignationLink.endDate)),
+    )
+    .leftJoin(designationMaster, eq(userDesignationLink.designationId, designationMaster.id))
     .orderBy(asc(user.name));
 }
 

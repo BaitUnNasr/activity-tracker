@@ -10,7 +10,6 @@ import {
   scheduleMaster,
   taskDayMeta,
   taskEntry,
-  taskMaster,
   user,
   userBranchLink,
   userDesignationLink,
@@ -83,7 +82,7 @@ export type PersonalDashboardData = {
   todayLeaveType: LeaveType | null;
   currentSchedule: DashboardScheduleRow | null;
   upcomingHolidays: DashboardHolidayRow[];
-  todayTasks: { taskId: number; name: string; hours: number }[];
+  todayTasks: { name: string; hours: number }[];
   todayTotal: number;
   weekData: WeekDay[];
   weekTotal: number;
@@ -253,7 +252,7 @@ export async function fetchPersonalDashboardData(
   const monthStart = today.slice(0, 7) + "-01";
   const thirtyDaysAgo = addDays(today, -30);
 
-  const [schedules, allHolidays, todayEntriesRaw, weekEntriesRaw, monthTotalRaw, recentDatesRaw, taskMasters, todayMetaRaw] =
+  const [schedules, allHolidays, todayEntriesRaw, weekEntriesRaw, monthTotalRaw, recentDatesRaw, todayMetaRaw] =
     await Promise.all([
       db.select().from(scheduleMaster),
 
@@ -268,7 +267,7 @@ export async function fetchPersonalDashboardData(
         .orderBy(holidayMaster.startDate),
 
       db
-        .select({ taskId: taskEntry.taskId, hours: taskEntry.hours })
+        .select({ task: taskEntry.task, hours: taskEntry.hours })
         .from(taskEntry)
         .where(
           and(eq(taskEntry.userId, sessionUser.id), eq(taskEntry.date, today)),
@@ -312,8 +311,6 @@ export async function fetchPersonalDashboardData(
         .groupBy(taskEntry.date)
         .orderBy(desc(taskEntry.date)),
 
-      db.select({ id: taskMaster.id, name: taskMaster.name }).from(taskMaster),
-
       db
         .select({ halfDay: taskDayMeta.halfDay, onLeave: taskDayMeta.onLeave, leaveType: taskDayMeta.leaveType })
         .from(taskDayMeta)
@@ -349,16 +346,11 @@ export async function fetchPersonalDashboardData(
 
   // Today's tasks — a task may hold several activities, so sum hours per task
   // for the dashboard summary (one row/segment per task).
-  const taskMap = new Map(taskMasters.map((t) => [t.id, t.name]));
-  const todayByTask = new Map<number, number>();
+  const todayByTask = new Map<string, number>();
   for (const e of todayEntriesRaw) {
-    todayByTask.set(e.taskId, (todayByTask.get(e.taskId) ?? 0) + e.hours);
+    todayByTask.set(e.task, (todayByTask.get(e.task) ?? 0) + e.hours);
   }
-  const todayTasks = [...todayByTask.entries()].map(([taskId, hours]) => ({
-    taskId,
-    name: taskMap.get(taskId) ?? "Unknown",
-    hours,
-  }));
+  const todayTasks = [...todayByTask.entries()].map(([name, hours]) => ({ name, hours }));
   const todayTotal = todayTasks.reduce((s, t) => s + t.hours, 0);
 
   // Week data (Mon–Sun)
