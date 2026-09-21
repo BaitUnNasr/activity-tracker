@@ -100,9 +100,34 @@ export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Durations are entered in 5-minute steps, which have no exact float-hours
+// representation (5m = 0.08333…h). Everything the UI compares or totals is
+// therefore rounded to whole minutes first; hours remain the storage unit.
+export const STEP_MINUTES = 5;
+export const MIN_MINUTES = 5;
+
+export const toMinutes = (hours: number) => Math.round(hours * 60);
+export const toHours = (minutes: number) => minutes / 60;
+
+// Highest value that is both within the cap and a whole 5-minute step. A cap
+// that isn't a multiple of the step rounds down, never up past the target.
+export function ceilingMinutes(maxMinutes: number): number {
+  return Math.max(MIN_MINUTES, Math.floor(maxMinutes / STEP_MINUTES) * STEP_MINUTES);
+}
+
+// Snap an arbitrary minute value onto the step grid and into range.
+export function clampMinutes(value: number, maxMinutes: number): number {
+  const ceiling = ceilingMinutes(maxMinutes);
+  const snapped = Math.round(value / STEP_MINUTES) * STEP_MINUTES;
+  return Math.min(ceiling, Math.max(MIN_MINUTES, snapped));
+}
+
 export function fmtHrs(n: number): string {
-  const h = Math.floor(n);
-  const m = Math.round((n - h) * 60);
+  const total = Math.round(n * 60);
+  if (total === 0) return "0h";
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 

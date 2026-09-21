@@ -339,7 +339,7 @@ function WeekCard({
                           "text-[11px] font-bold tabular-nums",
                           d.status === "partial" ? "text-amber-950" : "text-lime-950",
                         )}>
-                          {d.hours}h
+                          {fmtHrs(d.hours)}
                         </span>
                       )}
                     </div>

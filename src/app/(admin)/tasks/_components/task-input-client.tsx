@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   CalendarDays,
@@ -43,11 +43,17 @@ import {
   fmtHrs,
   fmtLong,
   getDayStatus,
+  ceilingMinutes,
+  clampMinutes,
   LEAVE_TYPE_OPTIONS,
+  MIN_MINUTES,
   MONTHS,
   parseISO,
+  STEP_MINUTES,
   taskColor,
   toDateStr,
+  toHours,
+  toMinutes,
   type LocalDay,
   type LocalEntry,
 } from "./timesheet-shared";
@@ -89,7 +95,7 @@ export function TaskInputClient({
   const [pickedAnswer, setPickedAnswer] = useState("");
   const [isCustomAnswer, setIsCustomAnswer] = useState(false);
   const [customAnswer, setCustomAnswer] = useState("");
-  const [pickedHours, setPickedHours] = useState(1);
+  const [pickedMinutes, setPickedMinutes] = useState(60);
 
   // Ref always holds the latest dirty/saving state so effects read current values.
   const stateRef = useRef({ isDirty, selected, localDay, isSaving });
@@ -180,7 +186,11 @@ export function TaskInputClient({
   const { dailyTarget } = initialData;
   const halfTarget = dailyTarget / 2;
   const target = localDay.halfDay ? halfTarget : dailyTarget;
-  const total = localDay.entries.reduce((s, e) => s + e.hours, 0);
+  // Summed in whole minutes: adding 5-minute entries as float hours drifts, and
+  // "target reached" must not hinge on 7.999999 vs 8.
+  const targetMinutes = toMinutes(target);
+  const totalMinutes = localDay.entries.reduce((s, e) => s + toMinutes(e.hours), 0);
+  const total = toHours(totalMinutes);
 
   // A day's tasks stay editable until the end of the next day, so both today
   // and yesterday are within the normal grace window.
@@ -351,7 +361,7 @@ export function TaskInputClient({
   const handleConfirmAdd = () => {
     if (!pickedTaskId || !pickedCategory) return;
     const answer = isCustomAnswer ? customAnswer.trim() : pickedAnswer;
-    if (!answer || pickedHours <= 0) return;
+    if (!answer || pickedMinutes < MIN_MINUTES) return;
     const category = pickedCategory.name;
     const taskName = initialData.tasks.find((t) => t.id === pickedTaskId)?.name;
     if (!taskName) return;
@@ -360,23 +370,25 @@ export function TaskInputClient({
       toast.error("That subcategory is already added.");
       return;
     }
-    modify((c) => ({ ...c, entries: [...c.entries, { task: taskName, category, answer, hours: pickedHours }] }));
+    modify((c) => ({ ...c, entries: [...c.entries, { task: taskName, category, answer, hours: toHours(pickedMinutes) }] }));
     setPickStep("none");
     setPickedTaskId(null);
     setPickedCategoryId(null);
     setPickedAnswer("");
     setIsCustomAnswer(false);
     setCustomAnswer("");
-    setPickedHours(1);
+    setPickedMinutes(60);
   };
 
   const handleRemove = (task: string, category: string, answer: string) =>
     modify((c) => ({ ...c, entries: c.entries.filter((e) => !(e.task === task && e.category === category && e.answer === answer)) }));
 
-  const handleHours = (task: string, category: string, answer: string, hours: number) =>
+  const handleMinutes = (task: string, category: string, answer: string, minutes: number) =>
     modify((c) => ({
       ...c,
-      entries: c.entries.map((e) => (e.task === task && e.category === category && e.answer === answer ? { ...e, hours } : e)),
+      entries: c.entries.map((e) =>
+        e.task === task && e.category === category && e.answer === answer ? { ...e, hours: toHours(minutes) } : e,
+      ),
     }));
 
   const stepMonth = (dir: number) => {
@@ -407,7 +419,7 @@ export function TaskInputClient({
     pickedTaskId !== null &&
     pickedCategoryId !== null &&
     chosenAnswer.length > 0 &&
-    pickedHours > 0 &&
+    pickedMinutes >= MIN_MINUTES &&
     !usedAnswersForPicked.includes(chosenAnswer);
 
   const slideAnim =
@@ -612,15 +624,15 @@ export function TaskInputClient({
                       if (!isEditable) {
                         return <ReadOnlyTaskRow key={key} entry={entry} />;
                       }
-                      const otherHours = localDay.entries
+                      const otherMinutes = localDay.entries
                         .filter((e) => !(e.task === entry.task && e.category === entry.category && e.answer === entry.answer))
-                        .reduce((s, e) => s + e.hours, 0);
+                        .reduce((s, e) => s + toMinutes(e.hours), 0);
                       return (
                         <TaskRow
                           key={key}
                           entry={entry}
-                          maxHours={Math.max(0.5, target - otherHours)}
-                          onHours={(h) => handleHours(entry.task, entry.category, entry.answer, h)}
+                          maxMinutes={Math.max(MIN_MINUTES, targetMinutes - otherMinutes)}
+                          onMinutes={(m) => handleMinutes(entry.task, entry.category, entry.answer, m)}
                           onRemove={() => handleRemove(entry.task, entry.category, entry.answer)}
                         />
                       );
@@ -630,11 +642,11 @@ export function TaskInputClient({
                   {isEditable && pickStep === "none" && (
                     <Button
                       onClick={() => { setPickDir("fwd"); setPickStep("task"); setPickedTaskId(null); setPickedCategoryId(null); }}
-                      disabled={total >= target}
+                      disabled={totalMinutes >= targetMinutes}
                       className="w-full rounded-xl bg-brand text-foreground hover:bg-brand hover:brightness-105 gap-2 h-10"
                     >
                       <Plus className="h-4 w-4" />
-                      {total >= target ? "Daily target reached" : "Add activity"}
+                      {totalMinutes >= targetMinutes ? "Daily target reached" : "Add activity"}
                     </Button>
                   )}
 
@@ -657,14 +669,14 @@ export function TaskInputClient({
                       anim={slideAnim}
                       task={pickedTask}
                       onPick={(cid) => {
-                        const remaining = Math.max(0.5, target - total);
+                        const remaining = Math.max(MIN_MINUTES, targetMinutes - totalMinutes);
                         setPickDir("fwd");
                         setPickedCategoryId(cid);
                         setPickStep("answer");
                         setPickedAnswer("");
                         setIsCustomAnswer(false);
                         setCustomAnswer("");
-                        setPickedHours(Math.min(1, remaining));
+                        setPickedMinutes(Math.min(60, remaining));
                       }}
                       onBack={() => { setPickDir("back"); setPickStep("task"); }}
                       onCancel={() => setPickStep("none")}
@@ -679,14 +691,14 @@ export function TaskInputClient({
                       pickedAnswer={pickedAnswer}
                       isCustom={isCustomAnswer}
                       customAnswer={customAnswer}
-                      hours={pickedHours}
-                      maxHours={Math.max(0.5, target - total)}
+                      minutes={pickedMinutes}
+                      maxMinutes={Math.max(MIN_MINUTES, targetMinutes - totalMinutes)}
                       canConfirm={canConfirmAdd}
                       usedAnswers={usedAnswersForPicked}
                       onSelectAnswer={(a) => { setPickedAnswer(a); setIsCustomAnswer(false); }}
                       onSelectCustom={() => { setIsCustomAnswer(true); setPickedAnswer(""); }}
                       onCustomChange={setCustomAnswer}
-                      onHours={setPickedHours}
+                      onMinutes={setPickedMinutes}
                       onConfirm={handleConfirmAdd}
                       onBack={() => { setPickDir("back"); setPickStep("category"); }}
                     />
@@ -1237,20 +1249,18 @@ function ProgressCard({
 // ─── Task row ─────────────────────────────────────────────────────────────────
 
 function TaskRow({
-  entry, maxHours, onHours, onRemove,
+  entry, maxMinutes, onMinutes, onRemove,
 }: {
-  entry: LocalEntry; maxHours: number;
-  onHours: (h: number) => void; onRemove: () => void;
+  entry: LocalEntry; maxMinutes: number;
+  onMinutes: (m: number) => void; onRemove: () => void;
 }) {
-  const atMax = entry.hours >= maxHours;
-  const stepHours = (delta: number) => {
-    const n = Math.round((entry.hours + delta) * 2) / 2;
-    if (n >= 0.5 && n <= maxHours) onHours(n);
-  };
+  const [open, setOpen] = useState(false);
+  const minutes = toMinutes(entry.hours);
+  const atMax = minutes >= maxMinutes;
 
   return (
     <div className={cn(
-      "flex items-center gap-3 px-3 py-2.5 border rounded-xl transition-colors",
+      "flex items-center gap-2.5 px-3 py-2.5 border rounded-xl transition-colors",
       atMax ? "bg-brand/5 border-brand/25" : "bg-muted border-border",
     )}>
       <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(entry.task) }} />
@@ -1260,31 +1270,179 @@ function TaskRow({
           {entry.category ? `${entry.category} · ${entry.answer}` : entry.answer}
         </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={() => stepHours(-0.5)}
-          disabled={entry.hours <= 0.5}
-          className="h-6 w-6 rounded-lg bg-background border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <Minus className="h-3 w-3" />
-        </button>
-        <span className="text-sm font-bold tabular-nums text-foreground w-10 text-center">
-          {fmtHrs(entry.hours)}
-        </span>
-        <button
-          onClick={() => stepHours(0.5)}
-          disabled={atMax}
-          className="h-6 w-6 rounded-lg bg-background border border-border grid place-items-center text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      </div>
+
+      {/* The duration opens in a popover: the row has no space for two steppers,
+          and editing an entry deserves the same control as creating one. */}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Edit time for ${entry.answer}, currently ${fmtHrs(entry.hours)}`}
+            className="h-9 min-w-[68px] px-2.5 shrink-0 rounded-lg bg-background border border-border text-sm font-bold tabular-nums text-foreground transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            {fmtHrs(entry.hours)}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-[290px] p-3">
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <span className="text-xs font-semibold text-foreground truncate">{entry.answer}</span>
+            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">max {fmtHrs(toHours(maxMinutes))}</span>
+          </div>
+          <DurationControl minutes={minutes} maxMinutes={maxMinutes} onChange={onMinutes} />
+        </PopoverContent>
+      </Popover>
+
       <button
         onClick={onRemove}
-        className="h-6 w-6 rounded-lg grid place-items-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+        aria-label={`Remove ${entry.answer}`}
+        className="h-9 w-9 rounded-lg grid place-items-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
       >
-        <X className="h-3 w-3" />
+        <X className="h-4 w-4" />
       </button>
+    </div>
+  );
+}
+
+// ─── Duration control ─────────────────────────────────────────────────────────
+// Hours and minutes are stepped separately (+1h / +5m) so a 4-hour entry takes
+// four taps rather than eight, and the presets make the common durations a
+// single tap. Both fields are also typeable, which stays the fastest route to
+// an arbitrary value like 3h 25m.
+//
+// State is one number — total minutes — so +5m at 55m rolls into the next hour
+// instead of dead-ending, and hours/minutes can never disagree.
+
+const PRESET_MINUTES = [30, 60, 120, 240];
+
+function DurationControl({
+  minutes, maxMinutes, onChange,
+}: {
+  minutes: number;
+  maxMinutes: number;
+  onChange: (minutes: number) => void;
+}) {
+  const uid = useId();
+  const hRef = useRef<HTMLInputElement>(null);
+  const mRef = useRef<HTMLInputElement>(null);
+
+  const ceiling = ceilingMinutes(maxMinutes);
+  const clamp = (v: number) => clampMinutes(v, maxMinutes);
+
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+
+  // The two fields are uncontrolled and keyed on the committed value, so typing
+  // is plain DOM state and a half-typed "1" on the way to "15" is never clamped
+  // out from under the user. Typing does not change `minutes`, so nothing
+  // remounts mid-edit; the value is read from both refs on blur or Enter.
+  const commit = () => {
+    const nh = Math.max(0, parseInt(hRef.current?.value ?? "", 10) || 0);
+    const nm = Math.max(0, parseInt(mRef.current?.value ?? "", 10) || 0);
+    onChange(clamp(nh * 60 + nm));
+  };
+
+  const step = (delta: number) => onChange(clamp(minutes + delta));
+  const atMin = minutes <= MIN_MINUTES;
+  const atMax = minutes >= ceiling;
+
+  const field = (
+    label: string,
+    ref: React.RefObject<HTMLInputElement | null>,
+    value: number,
+    delta: number,
+    canDown: boolean,
+    canUp: boolean,
+  ) => {
+    const id = `${uid}-${label}`;
+    return (
+      <div className="flex-1 min-w-0">
+        <label htmlFor={id} className="block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+          {label}
+        </label>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={`Decrease ${label}`}
+            onClick={() => step(-delta)}
+            disabled={!canDown}
+            className="h-11 w-11 shrink-0 rounded-xl bg-background border border-border grid place-items-center text-muted-foreground transition-colors hover:text-foreground hover:border-foreground/30 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+          <input
+            key={value}
+            id={id}
+            ref={ref}
+            type="text"
+            inputMode="numeric"
+            defaultValue={String(value)}
+            aria-label={`${label} spent`}
+            onFocus={(e) => e.currentTarget.select()}
+            onInput={(e) => {
+              const el = e.currentTarget;
+              el.value = el.value.replace(/\D/g, "").slice(0, 3);
+            }}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
+            className="h-11 w-full min-w-0 rounded-xl bg-background border border-border text-center text-base font-bold tabular-nums text-foreground outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand/40"
+          />
+          <button
+            type="button"
+            aria-label={`Increase ${label}`}
+            onClick={() => step(delta)}
+            disabled={!canUp}
+            className="h-11 w-11 shrink-0 rounded-xl bg-background border border-border grid place-items-center text-muted-foreground transition-colors hover:text-foreground hover:border-foreground/30 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const presets = PRESET_MINUTES.filter((p) => p <= ceiling);
+  const showFill = ceiling > 0 && !presets.includes(ceiling);
+
+  return (
+    <div>
+      <div className="flex items-start gap-2">
+        {field("Hours", hRef, h, 60, minutes - 60 >= MIN_MINUTES, !atMax)}
+        {field("Minutes", mRef, m, STEP_MINUTES, !atMin, !atMax)}
+      </div>
+
+      {/* One tap for the durations people actually log. */}
+      <div className="flex flex-wrap gap-1.5 mt-2.5">
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(clamp(p))}
+            className={cn(
+              "px-3 h-8 rounded-full border text-xs font-semibold transition-colors",
+              minutes === p
+                ? "bg-brand/15 border-brand/45 text-foreground"
+                : "bg-muted border-border text-muted-foreground hover:text-foreground hover:border-foreground/25",
+            )}
+          >
+            {fmtHrs(toHours(p))}
+          </button>
+        ))}
+        {showFill && (
+          <button
+            type="button"
+            onClick={() => onChange(ceiling)}
+            className={cn(
+              "px-3 h-8 rounded-full border text-xs font-semibold transition-colors",
+              minutes === ceiling
+                ? "bg-brand/15 border-brand/45 text-foreground"
+                : "bg-muted border-border text-muted-foreground hover:text-foreground hover:border-foreground/25",
+            )}
+          >
+            Fill {fmtHrs(toHours(ceiling))}
+          </button>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -1400,25 +1558,20 @@ function CategoryPicker({
 // ─── Answer picker ────────────────────────────────────────────────────────────
 
 function AnswerPicker({
-  task, category, pickedAnswer, isCustom, customAnswer, hours, maxHours, canConfirm, usedAnswers,
-  onSelectAnswer, onSelectCustom, onCustomChange, onHours, onConfirm, onBack, anim,
+  task, category, pickedAnswer, isCustom, customAnswer, minutes, maxMinutes, canConfirm, usedAnswers,
+  onSelectAnswer, onSelectCustom, onCustomChange, onMinutes, onConfirm, onBack, anim,
 }: {
   task: TaskForPicker; category: CategoryForPicker; pickedAnswer: string; isCustom: boolean; customAnswer: string;
-  hours: number; maxHours: number; canConfirm: boolean; usedAnswers: string[];
+  minutes: number; maxMinutes: number; canConfirm: boolean; usedAnswers: string[];
   onSelectAnswer: (a: string) => void; onSelectCustom: () => void;
-  onCustomChange: (v: string) => void; onHours: (h: number) => void;
+  onCustomChange: (v: string) => void; onMinutes: (m: number) => void;
   onConfirm: () => void; onBack: () => void; anim?: string;
 }) {
-  const atMax = hours >= maxHours;
   const customTrimmed = customAnswer.trim();
   const customDuplicate = isCustom && customTrimmed.length > 0 && usedAnswers.includes(customTrimmed);
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const subs = q ? category.subcategories.filter((s) => s.label.toLowerCase().includes(q)) : category.subcategories;
-  const stepH = (delta: number) => {
-    const n = Math.round((hours + delta) * 2) / 2;
-    if (n >= 0.5 && n <= maxHours) onHours(n);
-  };
 
   return (
     <div className={cn("mt-2 border border-border rounded-xl overflow-hidden", anim)}>
@@ -1504,27 +1657,15 @@ function AnswerPicker({
           </>
         )}
 
-        {/* Hours */}
-        <div className="flex items-center gap-2 pt-1 border-t border-dashed border-border">
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-semibold text-muted-foreground">Hours spent</span>
-            <span className="text-[10px] text-muted-foreground ml-1.5">max {fmtHrs(maxHours)}</span>
+        {/* Time spent */}
+        <div className="pt-3 border-t border-dashed border-border">
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <span className="text-xs font-semibold text-foreground">Time spent</span>
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {fmtHrs(toHours(minutes))} · max {fmtHrs(toHours(maxMinutes))}
+            </span>
           </div>
-          <button
-            onClick={() => stepH(-0.5)}
-            disabled={hours <= 0.5}
-            className="h-7 w-7 rounded-lg bg-muted border border-border grid place-items-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Minus className="h-3 w-3" />
-          </button>
-          <span className="text-sm font-bold tabular-nums text-foreground w-10 text-center">{fmtHrs(hours)}</span>
-          <button
-            onClick={() => stepH(0.5)}
-            disabled={atMax}
-            className="h-7 w-7 rounded-lg bg-muted border border-border grid place-items-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Plus className="h-3 w-3" />
-          </button>
+          <DurationControl minutes={minutes} maxMinutes={maxMinutes} onChange={onMinutes} />
         </div>
 
         {/* Confirm */}
