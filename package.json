@@ -9,7 +9,8 @@
     "start": "next start -p 3040",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.14",

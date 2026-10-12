@@ -50,6 +50,7 @@ import {
   MONTHS,
   parseISO,
   STEP_MINUTES,
+  registerTaskColors,
   taskColor,
   toDateStr,
   toHours,
@@ -184,6 +185,7 @@ export function TaskInputClient({
 
   const holidayMap = useMemo(() => buildHolidayMap(initialData.holidays), [initialData.holidays]);
   const { dailyTarget } = initialData;
+  registerTaskColors(initialData);
   const halfTarget = dailyTarget / 2;
   const target = localDay.halfDay ? halfTarget : dailyTarget;
   // Summed in whole minutes: adding 5-minute entries as float hours drifts, and

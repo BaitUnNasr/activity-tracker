@@ -15,13 +15,14 @@ import {
   DayBadge,
   LeaveActiveCard,
   LockedNotice,
-  ReadOnlyTaskRow,
+  ReadOnlyTaskGroups,
   buildHolidayMap,
   buildServerMap,
   fmtHrs,
   fmtLong,
   getDayStatus,
   parseISO,
+  registerTaskColors,
   toDateStr,
   type LocalDay,
 } from "../../../tasks/_components/timesheet-shared";
@@ -62,6 +63,7 @@ export function ActivityView({
   const holidayMap = useMemo(() => buildHolidayMap(data.holidays), [data.holidays]);
   const grantedSet = useMemo(() => new Set(grantedDates), [grantedDates]);
   const { dailyTarget } = data;
+  registerTaskColors(data);
 
   const selectedDay = serverMap.get(selected) ?? EMPTY_DAY;
   const status = getDayStatus(selected, holidayMap, selectedDay, today, dailyTarget);
@@ -244,11 +246,7 @@ export function ActivityView({
                     No tasks were logged for this day.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {selectedDay.entries.map((entry, i) => (
-                      <ReadOnlyTaskRow key={`${entry.task}::${entry.answer}::${i}`} entry={entry} />
-                    ))}
-                  </div>
+                  <ReadOnlyTaskGroups entries={selectedDay.entries} />
                 )}
               </div>
             </Card>

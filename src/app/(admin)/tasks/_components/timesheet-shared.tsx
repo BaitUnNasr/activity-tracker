@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/src/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/src/components/ui/tooltip";
 import { IconChip } from "@/src/components/page-ui";
 import { CalendarWeekToggle } from "@/src/components/calendar-week-toggle";
 import { useCollapsibleCalendar } from "@/src/hooks/use-collapsible-calendar";
@@ -137,8 +138,20 @@ export function fmtLong(s: string): string {
   });
 }
 
+// Hashing names into 8 slots collides (two tasks, one colour), so every task
+// the page knows about gets its own slot, ordered by name so a task keeps its
+// colour across days. Unregistered names fall back to the hash.
+// ponytail: module-level registry, set during render; slots repeat past 8 tasks.
+const colorSlots = new Map<string, number>();
+
+export function registerTaskColors(data: TasksPageData): void {
+  const names = new Set([...data.tasks.map((t) => t.name), ...data.entries.map((e) => e.task)]);
+  colorSlots.clear();
+  [...names].sort().forEach((name, i) => colorSlots.set(name, i % TASK_COLORS.length));
+}
+
 export function taskColor(task: string): string {
-  return TASK_COLORS[hashIndex(task, TASK_COLORS.length)];
+  return TASK_COLORS[colorSlots.get(task) ?? hashIndex(task, TASK_COLORS.length)];
 }
 
 export function buildHolidayMap(holidays: { name: string; startDate: string; endDate: string }[]): Map<string, string> {
@@ -380,7 +393,7 @@ export function DayBadge({ status }: { status: DayStatus }) {
 
 // Renders straight from the entry: it carries its own task name, so a row still
 // shows correctly after the task is deleted, renamed or hidden from this user.
-export function ReadOnlyTaskRow({ entry }: { entry: LocalEntry }) {
+export function ReadOnlyTaskRow({ entry, percent }: { entry: LocalEntry; percent?: number }) {
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/50 border border-border/60 rounded-xl">
       <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: taskColor(entry.task) }} />
@@ -393,6 +406,106 @@ export function ReadOnlyTaskRow({ entry }: { entry: LocalEntry }) {
       <span className="text-sm font-semibold tabular-nums text-muted-foreground shrink-0">
         {fmtHrs(entry.hours)}
       </span>
+      {percent !== undefined && <SharePercent value={percent} />}
+    </div>
+  );
+}
+
+// Fixed-width so the percentages line up down the list.
+function SharePercent({ value }: { value: number }) {
+  return (
+    <span className="w-10 text-right text-xs font-medium tabular-nums text-muted-foreground shrink-0">
+      {value}%
+    </span>
+  );
+}
+
+// Whole-number shares that always total exactly 100 (largest remainder), so the
+// list never reads 33 + 33 + 33.
+export function sharePercents(values: number[]): number[] {
+  const total = values.reduce((s, v) => s + v, 0);
+  if (total === 0) return values.map(() => 0);
+  const exact = values.map((v) => (v * 100) / total);
+  const out = exact.map(Math.floor);
+  const left = 100 - out.reduce((s, v) => s + v, 0);
+  exact
+    .map((v, i) => [v - out[i], i] as const)
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, left)
+    .forEach(([, i]) => out[i]++);
+  return out;
+}
+
+// Read-only entries grouped by task, so a task logged several times reads as one
+// block with its subtotal. Groups keep the order their task was first logged.
+// Each task's share of the day's logged time is shown as a bar and a percentage.
+export function ReadOnlyTaskGroups({ entries }: { entries: LocalEntry[] }) {
+  const groups = new Map<string, LocalEntry[]>();
+  for (const e of entries) groups.set(e.task, [...(groups.get(e.task) ?? []), e]);
+  const tasks = [...groups].map(([task, items]) => ({
+    task,
+    items,
+    minutes: items.reduce((s, e) => s + toMinutes(e.hours), 0),
+  }));
+  const percents = sharePercents(tasks.map((t) => t.minutes));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <TooltipProvider>
+        <div role="group" aria-label="Share of logged time" className="flex h-2.5 gap-0.5 mb-2 rounded-full">
+          {tasks.map((t, i) => (
+            <Tooltip key={t.task}>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  aria-label={`${t.task}: ${percents[i]}%, ${fmtHrs(toHours(t.minutes))}`}
+                  className="h-full basis-0 min-w-[3px] first:rounded-l-full last:rounded-r-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{ flexGrow: t.minutes, background: taskColor(t.task) }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                <span className="size-2 rounded-sm shrink-0" style={{ background: taskColor(t.task) }} />
+                <span className="font-semibold">{t.task}</span>
+                <span className="tabular-nums opacity-80">
+                  {percents[i]}% · {fmtHrs(toHours(t.minutes))}
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+      </TooltipProvider>
+      {tasks.map(({ task, items, minutes }, i) => {
+        if (items.length === 1) return <ReadOnlyTaskRow key={task} entry={items[0]} percent={percents[i]} />;
+        const color = taskColor(task);
+        return (
+          <div key={task} className="px-3 py-2.5 bg-muted/50 border border-border/60 rounded-xl">
+            <div className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color }} />
+              <span className="flex-1 min-w-0 text-[13.5px] font-semibold text-foreground truncate">{task}</span>
+              <span className="text-sm font-semibold tabular-nums text-foreground shrink-0">
+                {fmtHrs(toHours(minutes))}
+              </span>
+              <SharePercent value={percents[i]} />
+            </div>
+            {/* Rule in the task colour ties each activity to its task. */}
+            <ul
+              className="mt-2 ml-1 pl-4 border-l-2 flex flex-col gap-1.5"
+              style={{ borderColor: `${color}66` }}
+            >
+              {items.map((e, i) => (
+                <li key={`${e.category}::${e.answer}::${i}`} className="flex items-baseline gap-3 text-xs">
+                  <span className="flex-1 min-w-0 truncate text-muted-foreground">
+                    {e.category && <span className="font-medium text-foreground/85">{e.category} · </span>}
+                    {e.answer}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground shrink-0">{fmtHrs(e.hours)}</span>
+                  <span className="w-10 shrink-0" aria-hidden />
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
