@@ -187,8 +187,9 @@ export function getDayStatus(
   // upcoming leave days render as leave, not blank "future" cells.
   if (dayData?.onLeave) return "leave";
   if (dateStr > today) return "future";
-  const total = dayData?.entries.reduce((s, e) => s + e.hours, 0) ?? 0;
-  const target = dayData?.halfDay ? dailyTarget / 2 : dailyTarget;
+  // Compared in whole minutes — float-hour sums drift (7.4999 vs 7.5).
+  const total = dayData?.entries.reduce((s, e) => s + toMinutes(e.hours), 0) ?? 0;
+  const target = toMinutes(dayData?.halfDay ? dailyTarget / 2 : dailyTarget);
   if (!dayData || total === 0) return dateStr === today ? "today-empty" : "missing";
   if (dayData.halfDay) return "half";
   if (total >= target) return "complete";

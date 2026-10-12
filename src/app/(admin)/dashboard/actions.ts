@@ -229,7 +229,8 @@ export async function fetchAdminDashboardData(
         : 7;
       return { user: u, hoursLogged, target };
     })
-    .filter(({ hoursLogged, target }) => hoursLogged < target);
+    // Whole minutes — summed float hours drift (7.4999 vs 7.5).
+    .filter(({ hoursLogged, target }) => Math.round(hoursLogged * 60) < Math.round(target * 60));
 
   return {
     users,
@@ -375,7 +376,7 @@ export async function fetchPersonalDashboardData(
     else if (isHoliday) status = "holiday";
     else if (isToday) status = "today";
     else if (isFuture) status = "future";
-    else if (hours >= dailyTarget) status = "complete";
+    else if (Math.round(hours * 60) >= Math.round(dailyTarget * 60)) status = "complete";
     else if (hours > 0) status = "partial";
     else status = "future"; // past day with no log
 
