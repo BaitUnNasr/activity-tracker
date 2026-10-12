@@ -96,7 +96,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   return (
     <div className="mt-6">
       {/* Back + header */}
-      <div className="relative isolate flex items-center gap-3 mb-6">
+      {/* Phones: back + name share the first row; the action wraps to a full-width row. */}
+      <div className="relative isolate flex flex-wrap items-start sm:items-center gap-3 mb-5 sm:mb-6">
         <HeaderGlow />
         <Link
           href="/users"
@@ -105,8 +106,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <div>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground leading-none">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground leading-none break-words">
             {userData.name}
           </h1>
           <p className="text-muted-foreground mt-1.5 text-sm">
@@ -115,28 +116,33 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         </div>
         <Link
           href={`/users/${id}/activity`}
-          className="ml-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand text-foreground text-sm font-bold ring-1 ring-foreground/10 shadow-sm hover:brightness-105 transition-all active:scale-[0.98] shrink-0"
+          className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-brand text-foreground text-sm font-bold ring-1 ring-foreground/10 shadow-sm hover:brightness-105 transition-all active:scale-[0.98] shrink-0"
         >
           <Activity className="h-4 w-4" />
           View activity
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
         {/* Left: avatar card + history */}
-        <Card className="items-center text-center gap-1">
-          <Avatar className="h-28 w-28">
-            <AvatarFallback className="bg-brand text-foreground text-3xl font-bold">{initials}</AvatarFallback>
-          </Avatar>
+        <Card className="items-center text-center gap-1 py-5 sm:py-6">
+          {/* Phones: one compact row — name and designation are already in the header above. */}
+          <div className="w-full flex items-center gap-4 px-5 text-left sm:flex-col sm:gap-1 sm:px-0 sm:text-center">
+            <Avatar className="h-16 w-16 sm:h-28 sm:w-28">
+              <AvatarFallback className="bg-brand text-foreground text-xl sm:text-3xl font-bold">{initials}</AvatarFallback>
+            </Avatar>
 
-          <h2 className="text-xl font-semibold text-card-foreground">{userData.name}</h2>
-          <p className="text-sm text-muted-foreground">{currentDesignation?.name ?? "—"}</p>
+            <div className="min-w-0 flex flex-col items-start gap-1 sm:items-center">
+              <h2 className="hidden sm:block text-xl font-semibold text-card-foreground">{userData.name}</h2>
+              <p className="hidden sm:block text-sm text-muted-foreground">{currentDesignation?.name ?? "—"}</p>
 
-          <div className="flex items-center gap-2 mt-3">
-            <span className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-brand text-foreground">
-              # {userData.employeeCode}
-            </span>
-            <StatusToggle userId={userData.id} isActive={userData.isActive} />
+              <div className="flex flex-wrap items-center gap-2 sm:mt-3 sm:justify-center">
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-brand text-foreground">
+                  # {userData.employeeCode}
+                </span>
+                <StatusToggle userId={userData.id} userName={userData.name} isActive={userData.isActive} />
+              </div>
+            </div>
           </div>
 
           {userData.createdAt && (
@@ -204,7 +210,7 @@ function InfoRow({
   value: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-4">
+    <div className="flex items-center justify-between gap-3 py-3 sm:py-4">
       <div className="flex items-center gap-3">
         <div className="h-9 w-9 rounded-full bg-muted grid place-items-center shrink-0">
           <Icon className="h-4 w-4 text-muted-foreground" />

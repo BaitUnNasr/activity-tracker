@@ -92,6 +92,32 @@ export function ActivityView({
       ? "grant"
       : "none";
   const buttonEnabled = grantMode !== "none";
+  const disabledReason = buttonEnabled
+    ? null
+    : isGraceWindow && isPast
+      ? "The user can still edit yesterday themselves — no access needed"
+      : "Select a working day older than yesterday (not a holiday or Sunday) to grant access";
+
+  // Rendered twice: in the header from sm up, and inside the day card on phones,
+  // where the header is scrolled away by the time a day is picked.
+  const backdateButton = (className: string) => (
+    <button
+      onClick={() => setConfirmMode(grantMode === "none" ? null : grantMode)}
+      disabled={!buttonEnabled || pending}
+      className={cn(
+        "items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold ring-1 shadow-sm transition-all active:scale-[0.98] shrink-0",
+        "disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100",
+        grantMode === "revoke"
+          ? "bg-destructive/10 text-destructive ring-destructive/25 hover:bg-destructive/15"
+          : "bg-brand text-foreground ring-foreground/10 hover:brightness-105",
+        className,
+      )}
+      title={disabledReason ?? undefined}
+    >
+      <CalendarClock className="h-4 w-4" />
+      {grantMode === "revoke" ? "Revoke backdate access" : "Backdate access"}
+    </button>
+  );
 
   const stepMonth = (dir: number) => {
     setViewYear((y) => {
@@ -133,23 +159,23 @@ export function ActivityView({
   return (
     <div className="mt-6">
       {/* Back + header */}
-      <div className="relative isolate flex items-center gap-3 mb-6">
+      <div className="relative isolate flex items-start sm:items-center gap-3 mb-5 sm:mb-6">
         <HeaderGlow />
         <BackButton fallbackHref={backHref} />
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap mb-2 sm:mb-1.5">
             <StatusPill tone="active">
               <span className="h-1.5 w-1.5 rounded-full bg-foreground/80" />
               Activity
             </StatusPill>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted ring-1 ring-border text-xs font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted ring-1 ring-border text-xs font-medium text-muted-foreground whitespace-nowrap">
               {target.designation ?? "—"}
               <span className="opacity-40">·</span>
               <Building2 className="h-3.5 w-3.5" />
               {target.branch ?? "—"}
             </span>
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground leading-none">
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground leading-none break-words">
             {target.name}
           </h1>
           <p className="text-muted-foreground mt-1.5 text-sm">
@@ -157,28 +183,8 @@ export function ActivityView({
           </p>
         </div>
 
-        {/* Backdate access button — enabled once a valid past day is selected */}
-        <button
-          onClick={() => setConfirmMode(grantMode === "none" ? null : grantMode)}
-          disabled={!buttonEnabled || pending}
-          className={cn(
-            "ml-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold ring-1 shadow-sm transition-all active:scale-[0.98] shrink-0",
-            "disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100",
-            grantMode === "revoke"
-              ? "bg-destructive/10 text-destructive ring-destructive/25 hover:bg-destructive/15"
-              : "bg-brand text-foreground ring-foreground/10 hover:brightness-105",
-          )}
-          title={
-            buttonEnabled
-              ? undefined
-              : isGraceWindow && isPast
-                ? "The user can still edit yesterday themselves — no access needed"
-                : "Select a working day older than yesterday (not a holiday or Sunday) to grant access"
-          }
-        >
-          <CalendarClock className="h-4 w-4" />
-          {grantMode === "revoke" ? "Revoke backdate access" : "Backdate access"}
-        </button>
+        {/* Backdate access — enabled once a valid past day is selected */}
+        {backdateButton("hidden sm:inline-flex ml-auto")}
       </div>
 
       {/* Timesheet */}
@@ -200,7 +206,7 @@ export function ActivityView({
         <aside className="flex flex-col gap-4">
           {/* Day header */}
           <Card className="gap-0 py-0">
-            <div className="p-5">
+            <div className="p-4 sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
@@ -224,6 +230,14 @@ export function ActivityView({
                   Still editable by the user — no access needed
                 </div>
               )}
+              {/* Phones: the action sits with the day it acts on; no hover, so the
+                  disabled reason is written out instead of living in a tooltip. */}
+              <div className="sm:hidden mt-4 pt-4 border-t border-border">
+                {backdateButton("flex w-full justify-center")}
+                {disabledReason && (
+                  <p className="mt-2 text-xs text-muted-foreground text-center">{disabledReason}</p>
+                )}
+              </div>
             </div>
           </Card>
 
@@ -233,7 +247,7 @@ export function ActivityView({
             <LockedNotice holidayName={holidayMap.get(selected)} isFuture={isFuture} />
           ) : (
             <Card className="gap-0 py-0">
-              <div className="p-5">
+              <div className="p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-bold text-foreground">Tasks</h3>
                   <span className="text-xs text-muted-foreground tabular-nums">

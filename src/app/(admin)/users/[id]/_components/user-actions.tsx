@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, Check, MapPin, Plus, ShieldCheck, X } from "lucide-react";
+import { CalendarDays, Check, MapPin, Plus, Power, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import { Button } from "@/src/components/ui/button";
 import { Calendar } from "@/src/components/ui/calendar";
@@ -24,12 +24,13 @@ type Option = { id: number; name: string };
 
 function ModalShell({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   return (
+    // Phones: a bottom sheet within thumb reach; sm and up: a centred dialog.
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm p-5"
+      className="fixed inset-0 z-50 grid items-end sm:place-items-center bg-black/40 backdrop-blur-sm sm:p-5"
       onClick={onClose}
     >
       <div
-        className="bg-card rounded-3xl w-full max-w-[440px] shadow-[0_30px_70px_-20px_rgba(0,0,0,0.45)] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="bg-card rounded-t-3xl sm:rounded-3xl w-full sm:max-w-[440px] max-h-[90dvh] overflow-y-auto pb-[env(safe-area-inset-bottom)] shadow-[0_30px_70px_-20px_rgba(0,0,0,0.45)] animate-in fade-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -95,31 +96,42 @@ function DatePickerInput({
 
 // ─── Status toggle (inline pill with LED + switch) ────────────────────────────
 
-export function StatusToggle({ userId, isActive }: { userId: string; isActive: boolean }) {
+export function StatusToggle({
+  userId,
+  userName,
+  isActive,
+}: {
+  userId: string;
+  userName: string;
+  isActive: boolean;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [optimisticActive, setOptimisticActive] = useState(isActive);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const next = !optimisticActive;
 
-  const handleToggle = () => {
-    const next = !optimisticActive;
-    setOptimisticActive(next);
+  const handleConfirm = () => {
     startTransition(async () => {
       const result = await toggleUserStatus(userId, next);
       if (result.success) {
-        toast.success(`User marked ${next ? "active" : "inactive"}.`);
+        setOptimisticActive(next);
+        setConfirmOpen(false);
+        toast.success(`${userName} marked ${next ? "active" : "inactive"}.`);
         router.refresh();
       } else {
-        setOptimisticActive(!next);
         toast.error(result.message ?? "Failed to update status");
       }
     });
   };
 
   return (
+    <>
     <button
-      onClick={handleToggle}
+      onClick={() => setConfirmOpen(true)}
       disabled={isPending}
-      aria-label="Toggle active status"
+      aria-label={`Status: ${optimisticActive ? "active" : "inactive"}. Change status`}
+      aria-haspopup="dialog"
       className={cn(
         "inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border transition-colors duration-150 disabled:opacity-60",
         "bg-muted/60 border-border hover:bg-muted",
@@ -142,6 +154,59 @@ export function StatusToggle({ userId, isActive }: { userId: string; isActive: b
         )} />
       </span>
     </button>
+
+    {confirmOpen && (
+      <ModalShell onClose={() => !isPending && setConfirmOpen(false)}>
+        <div role="dialog" aria-modal="true" aria-labelledby="status-confirm-title">
+          <div className="px-7 pt-7 pb-5">
+            <div className="flex items-center gap-3.5 mb-3">
+              <div className={cn(
+                "h-11 w-11 rounded-2xl grid place-items-center shrink-0",
+                next ? "bg-green-500/15 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive",
+              )}>
+                <Power className="h-5 w-5" />
+              </div>
+              <h3 id="status-confirm-title" className="text-xl font-bold tracking-tight text-foreground">
+                {next ? `Mark ${userName} active?` : `Mark ${userName} inactive?`}
+              </h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {next
+                ? "They'll be counted again in the dashboard's daily logging checks."
+                : "They'll be left out of the dashboard's daily logging checks and active counts. Their logged tasks stay, and they can still sign in."}
+            </p>
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 px-7 py-4 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              autoFocus
+              onClick={() => setConfirmOpen(false)}
+              disabled={isPending}
+              className="rounded-full"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              disabled={isPending}
+              className={cn(
+                "rounded-full gap-2 h-auto py-2.5 px-5",
+                next
+                  ? "bg-brand text-foreground hover:bg-brand hover:brightness-105"
+                  : "bg-destructive text-white hover:bg-destructive/90",
+              )}
+            >
+              <Check className="h-3.5 w-3.5" />
+              {isPending ? "Saving…" : next ? "Mark active" : "Mark inactive"}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
+    )}
+    </>
   );
 }
 

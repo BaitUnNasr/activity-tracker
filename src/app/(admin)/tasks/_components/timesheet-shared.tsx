@@ -132,6 +132,12 @@ export function fmtHrs(n: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+// Compact h:mm duration (7:30) for tight spaces like phone calendar cells.
+export function fmtClock(hours: number): string {
+  const total = toMinutes(hours);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 export function fmtLong(s: string): string {
   return parseISO(s).toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -241,7 +247,7 @@ export function CalendarCard({
           <IconChip size="sm"><CalendarDays className="h-3.5 w-3.5 text-foreground" /></IconChip>
           {MONTHS[viewMonth]} {viewYear}
         </CardTitle>
-        <CardDescription>Pick a day to log or review your tasks.</CardDescription>
+        <CardDescription className="hidden sm:block">Pick a day to log or review your tasks.</CardDescription>
         <CardAction>
           <div className="flex items-center gap-1.5">
             <Button variant="outline" size="icon-sm" onClick={() => handleStep(-1)} className="rounded-full">
@@ -321,7 +327,7 @@ export function CalendarCard({
                   {status === "leave" && <span className={cn("text-[11px] font-extrabold shrink-0", meta.cellText)}>L</span>}
                 </div>
 
-                <div className="absolute left-2 right-2 bottom-2">
+                <div className="absolute left-1.5 right-1.5 bottom-1.5 sm:left-2 sm:right-2 sm:bottom-2">
                   {status === "leave" && (
                     <span className={cn("text-[10px] font-semibold", meta.cellText)}>Leave</span>
                   )}
@@ -331,12 +337,14 @@ export function CalendarCard({
                     </span>
                   )}
                   {(status === "complete" || status === "partial" || status === "half") && (
-                    <span className={cn("text-[11px] font-bold tabular-nums", meta.cellText)}>
-                      {fmtHrs(entryTotal)}{dayData?.halfDay ? " · ½" : ""}
+                    <span className={cn("block text-[10.5px] sm:text-[11px] font-bold tabular-nums whitespace-nowrap", meta.cellText)}>
+                      {/* "7h 30m" doesn't fit a ~48px phone cell; h:mm does. ½ is already in the top row. */}
+                      <span className="sm:hidden">{fmtClock(entryTotal)}</span>
+                      <span className="hidden sm:inline">{fmtHrs(entryTotal)}{dayData?.halfDay ? " · ½" : ""}</span>
                     </span>
                   )}
                   {status === "missing" && (
-                    <span className={cn("text-[10px] font-semibold", meta.cellText)}>Not logged</span>
+                    <span className={cn("hidden sm:inline text-[10px] font-semibold", meta.cellText)}>Not logged</span>
                   )}
                 </div>
               </button>
