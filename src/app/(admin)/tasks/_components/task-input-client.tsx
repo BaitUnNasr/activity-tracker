@@ -7,6 +7,7 @@ import {
   Check,
   ChevronLeft,
   Clock,
+  Copy,
   Loader2,
   Minus,
   Plus,
@@ -63,19 +64,24 @@ import {
 
 export function TaskInputClient({
   today,
+  initialDate,
   initialData,
 }: {
   today: string;
+  initialDate?: string;
   initialData: TasksPageData;
 }) {
   const todayDate = parseISO(today);
-  const [viewYear, setViewYear] = useState(todayDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
-  const [selected, setSelected] = useState(today);
+  // A linked day must round-trip through the parser (rejects 2026-13-45); otherwise start on today.
+  const startDate = initialDate && toDateStr(parseISO(initialDate)) === initialDate ? initialDate : today;
+  const startDateObj = parseISO(startDate);
+  const [viewYear, setViewYear] = useState(startDateObj.getFullYear());
+  const [viewMonth, setViewMonth] = useState(startDateObj.getMonth());
+  const [selected, setSelected] = useState(startDate);
 
   const [serverMap, setServerMap] = useState<Map<string, LocalDay>>(() => buildServerMap(initialData));
   const [localDay, setLocalDay] = useState<LocalDay>(
-    () => serverMap.get(today) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] },
+    () => serverMap.get(startDate) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] },
   );
   const [isDirty, setIsDirty] = useState(false);
   const [confirmHalf, setConfirmHalf] = useState(false);
@@ -382,8 +388,71 @@ export function TaskInputClient({
     setPickedMinutes(60);
   };
 
-  const handleRemove = (task: string, category: string, answer: string) =>
-    modify((c) => ({ ...c, entries: c.entries.filter((e) => !(e.task === task && e.category === category && e.answer === answer)) }));
+  const handleRemove = (task: string, category: string, answer: string) => {
+    const date = selected;
+    const same = (e: LocalEntry) => e.task === task && e.category === category && e.answer === answer;
+    const idx = localDay.entries.findIndex(same);
+    const removed = localDay.entries[idx];
+    if (!removed) return;
+    modify((c) => ({ ...c, entries: c.entries.filter((e) => !same(e)) }));
+    toast(`Removed ${answer}`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (stateRef.current.selected !== date) {
+            toast.error(`Switch back to ${fmtShortDate(date)} to restore it.`);
+            return;
+          }
+          modify((c) => {
+            if (c.entries.some(same)) return c;
+            // Other entries may have grown meanwhile — restore only what still fits the target.
+            const used = c.entries.reduce((s, e) => s + toMinutes(e.hours), 0);
+            const room = targetMinutes - used;
+            if (room < MIN_MINUTES) {
+              toast.error("No time left today to restore it.");
+              return c;
+            }
+            const next = [...c.entries];
+            next.splice(Math.min(idx, next.length), 0, { ...removed, hours: toHours(clampMinutes(toMinutes(removed.hours), room)) });
+            return { ...c, entries: next };
+          });
+        },
+      },
+    });
+  };
+
+  // The most recent earlier day with tasks — the usual starting point for today's log.
+  const prevDay = useMemo(() => {
+    const found = [...serverMap.entries()]
+      .filter(([d, v]) => d < selected && v.entries.length > 0 && !v.onLeave)
+      .sort(([a], [b]) => (a < b ? 1 : -1))[0];
+    return found ? { date: found[0], entries: found[1].entries } : null;
+  }, [serverMap, selected]);
+  const prevLabel = prevDay
+    ? prevDay.date === yesterday ? "yesterday" : parseISO(prevDay.date).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
+    : "";
+
+  const handleCopyPrev = () => {
+    if (!prevDay) return;
+    const date = selected;
+    const copied: LocalEntry[] = [];
+    let room = targetMinutes;
+    for (const e of prevDay.entries) {
+      if (room < MIN_MINUTES) break;
+      const m = clampMinutes(toMinutes(e.hours), room);
+      copied.push({ ...e, hours: toHours(m) });
+      room -= m;
+    }
+    modify((c) => ({ ...c, entries: copied }));
+    toast.success(`Copied ${copied.length} task${copied.length === 1 ? "" : "s"} from ${prevLabel}`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (stateRef.current.selected === date) modify((c) => ({ ...c, entries: [] }));
+        },
+      },
+    });
+  };
 
   const handleMinutes = (task: string, category: string, answer: string, minutes: number) =>
     modify((c) => ({
@@ -612,6 +681,14 @@ export function TaskInputClient({
                   {localDay.entries.length === 0 && isEditable && pickStep === "none" && (
                     <div className="px-4 py-5 border border-dashed border-border rounded-xl text-center text-sm text-muted-foreground mb-3">
                       No activities logged yet — add one below.
+                      {prevDay && (
+                        <div className="mt-3">
+                          <Button variant="outline" size="sm" onClick={handleCopyPrev} className="rounded-full gap-1.5">
+                            <Copy className="h-3.5 w-3.5" />
+                            Copy {prevDay.entries.length} task{prevDay.entries.length === 1 ? "" : "s"} from {prevLabel}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1474,6 +1551,10 @@ function TaskPicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search tasks…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && filtered[0]) { e.preventDefault(); onPick(filtered[0].id); }
+            if (e.key === "Escape") onCancel();
+          }}
           className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30"
         />
       </div>
@@ -1534,6 +1615,10 @@ function CategoryPicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search categories & subcategories…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && filtered[0]) { e.preventDefault(); onPick(filtered[0].id); }
+            if (e.key === "Escape") onBack();
+          }}
           className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30"
         />
       </div>
@@ -1592,9 +1677,18 @@ function AnswerPicker({
       {/* Search */}
       <div className="p-2 border-b border-border">
         <input
+          autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search subcategories…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const first = subs.find((s) => !usedAnswers.includes(s.label));
+              if (first) onSelectAnswer(first.label);
+            }
+            if (e.key === "Escape") onBack();
+          }}
           className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30"
         />
       </div>
@@ -1651,6 +1745,7 @@ function AnswerPicker({
               value={customAnswer}
               onChange={(e) => onCustomChange(e.target.value)}
               placeholder="Describe what you did…"
+              onKeyDown={(e) => { if (e.key === "Enter" && canConfirm) { e.preventDefault(); onConfirm(); } }}
               className="w-full px-3 py-2 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40"
             />
             {customDuplicate && (

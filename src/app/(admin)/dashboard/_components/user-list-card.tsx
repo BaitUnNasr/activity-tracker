@@ -58,7 +58,11 @@ function PersonRow({ id, name, type, designation, branch, right }: {
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3.5 px-6 py-3.5 border-b border-border/60 last:border-b-0 hover:bg-muted/40 transition-colors">
+    <Link
+      href={`/users/${id}/activity`}
+      aria-label={`View ${name}'s activity`}
+      className="flex items-center gap-3.5 px-6 py-3.5 border-b border-border/60 last:border-b-0 hover:bg-muted/40 transition-colors focus-visible:outline-none focus-visible:bg-muted/60"
+    >
       <Avatar className="h-10 w-10 shrink-0 ring-1 ring-foreground/10">
         <AvatarFallback className="bg-brand text-foreground text-xs font-bold">
           {getInitials(name)}
@@ -77,14 +81,10 @@ function PersonRow({ id, name, type, designation, branch, right }: {
         </div>
       </div>
       {right}
-      <Link
-        href={`/users/${id}/activity`}
-        aria-label={`View ${name}'s activity`}
-        className="h-8 w-8 rounded-lg shrink-0 grid place-items-center border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-      >
+      <span aria-hidden className="h-8 w-8 rounded-lg shrink-0 grid place-items-center border border-border bg-background text-muted-foreground">
         <ChevronRight className="h-4 w-4" />
-      </Link>
-    </div>
+      </span>
+    </Link>
   );
 }
 

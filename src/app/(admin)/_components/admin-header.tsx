@@ -3,15 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   ActivitySquare,
   CalendarClock,
+  ClipboardList,
   CalendarDays,
   LayoutDashboard,
   ListTodo,
   LogOut,
   Menu,
-  Settings,
+  Moon,
+  Sun,
   User as UserIcon,
   Users,
 } from "lucide-react";
@@ -45,7 +48,7 @@ const navLinks = [
   { label: "Tasks", href: "/tasks", icon: ListTodo },
   { label: "Holidays", href: "/holidays", icon: CalendarDays },
   { label: "Schedule", href: "/schedule", icon: CalendarClock },
-  { label: "Task Master", href: "/task-master", icon: ListTodo },
+  { label: "Task Master", href: "/task-master", icon: ClipboardList },
 ];
 
 function getInitials(name: string) {
@@ -63,6 +66,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
 
   const initials = user?.name ? getInitials(user.name) : "?";
   const visibleNavLinks = navLinks.filter(
@@ -125,6 +129,15 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
 
       {/* Actions */}
       <div className="flex items-center gap-2 shrink-0 sm:justify-end">
+        {/* Theme toggle — the icon swaps via the .dark class, so SSR markup always matches */}
+        <IconButton
+          aria-label="Toggle dark theme"
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+        >
+          <Moon className="h-4 w-4 dark:hidden" />
+          <Sun className="h-4 w-4 hidden dark:block" />
+        </IconButton>
+
         {/* Hamburger — mobile only */}
         <IconButton
           aria-label="Open menu"
@@ -182,12 +195,6 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
                         <span>Profile</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton onClick={() => { router.push("/settings"); setDropdownOpen(false); }}>
-                        <Settings />
-                        <span>Settings</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
                   </SidebarMenu>
 
                   <SidebarSeparator />
@@ -240,12 +247,6 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
                   <span>Profile</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={() => { router.push("/settings"); setDrawerOpen(false); }}>
-                  <Settings />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
             <SidebarSeparator />
             <SidebarMenu className="p-2">
@@ -291,7 +292,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
                 const isActive = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <SidebarMenuItem key={href}>
-                    <SidebarMenuButton asChild isActive={isActive} size="lg" className={cn(isActive && "!bg-brand text-background")}>
+                    <SidebarMenuButton asChild isActive={isActive} size="lg" className={cn(isActive && "!bg-brand !text-foreground font-semibold")}>
                       <Link href={href} onClick={() => setSheetOpen(false)}>
                         <Icon />
                         <span>{label}</span>

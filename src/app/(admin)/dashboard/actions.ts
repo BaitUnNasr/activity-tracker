@@ -71,7 +71,7 @@ export type WeekDay = {
   d: number;
   dateStr: string;
   hours: number;
-  status: "complete" | "partial" | "today" | "holiday" | "weekend" | "future";
+  status: "complete" | "partial" | "missing" | "today" | "holiday" | "weekend" | "future";
 };
 
 export type PersonalDashboardData = {
@@ -119,7 +119,7 @@ function countWorkingDays(from: string, to: string): number {
   const end = new Date(to + "T00:00:00");
   while (cur <= end) {
     const d = cur.getDay();
-    if (d !== 0 && d !== 6) count++;
+    if (d !== 0) count++; // Sunday only — matches the timesheet (Mon–Sat are working days)
     cur.setDate(cur.getDate() + 1);
   }
   return count;
@@ -363,7 +363,7 @@ export async function fetchPersonalDashboardData(
     const dateStr = addDays(weekStart, i);
     const dt = new Date(dateStr + "T00:00:00");
     const d = dt.getDate();
-    const isWeekend = i >= 5;
+    const isWeekend = i === 6; // Sunday only, as on the timesheet
     const isToday = dateStr === today;
     const isFuture = dateStr > today;
     const isHoliday = allHolidays.some(
@@ -378,7 +378,7 @@ export async function fetchPersonalDashboardData(
     else if (isFuture) status = "future";
     else if (Math.round(hours * 60) >= Math.round(dailyTarget * 60)) status = "complete";
     else if (hours > 0) status = "partial";
-    else status = "future"; // past day with no log
+    else status = "missing"; // past working day with no log
 
     return { dow, d, dateStr, hours, status };
   });
@@ -398,7 +398,7 @@ export async function fetchPersonalDashboardData(
   for (let i = 0; i < 30; i++) {
     const dateStr = `${streakCur.getFullYear()}-${String(streakCur.getMonth() + 1).padStart(2, "0")}-${String(streakCur.getDate()).padStart(2, "0")}`;
     const dow = streakCur.getDay();
-    if (dow === 0 || dow === 6) {
+    if (dow === 0) {
       streakCur.setDate(streakCur.getDate() - 1);
       continue;
     }

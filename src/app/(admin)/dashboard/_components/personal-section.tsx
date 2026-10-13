@@ -58,7 +58,8 @@ const taskColor = (name: string) => TASK_COLORS[hashIndex(name, TASK_COLORS.leng
 const taskStroke = (name: string) => TASK_STROKE_COLORS[hashIndex(name, TASK_STROKE_COLORS.length)];
 
 const ALL_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const WORKING = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+// Mon–Sat are working days; only Sunday is off (same rule as the timesheet).
+const WORKING = new Set(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -199,7 +200,7 @@ function TodayProgressCard({
             <p className="mt-1.5 text-sm text-muted-foreground">No tasks are required for this day.</p>
           </div>
         ) : (
-          <div className="flex gap-6 items-center flex-wrap sm:flex-nowrap">
+          <div className="flex flex-col sm:flex-row gap-6 items-center">
             {/* Ring */}
             <ProgressRing pct={pct} logged={todayTotal} target={target} taskColors={todayTasks.map((t) => taskStroke(t.name))} />
 
@@ -231,7 +232,12 @@ function TodayProgressCard({
 
               {/* Task list */}
               {todayTasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-3">No tasks logged yet today.</p>
+                <p className="text-sm text-muted-foreground py-3">
+                  No tasks logged yet today.{" "}
+                  <Link href="/tasks" className="font-semibold text-foreground underline decoration-lime-500 decoration-2 underline-offset-4 hover:decoration-lime-600">
+                    Log your first task
+                  </Link>
+                </p>
               ) : (
                 <ul className="divide-y divide-border/60">
                   {todayTasks.map((t) => (
@@ -309,49 +315,67 @@ function WeekCard({
       <CardContent className="py-6">
         <div className="flex gap-2.5 items-end h-32 px-1">
           {weekData.map((d) => {
-            const off = d.status === "weekend" || d.status === "holiday" || d.status === "future";
-            const hPct = off ? 0 : Math.max(d.hours / maxH, 0.05);
+            // Placeholder columns: days off, missed days, and days still ahead.
+            const placeholder =
+              d.status === "weekend" || d.status === "holiday"
+                ? { box: "border-border", text: "text-muted-foreground", label: d.status === "holiday" ? "Holiday" : "Sunday" }
+                : d.status === "missing"
+                  ? { box: "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/20", text: "text-red-600 dark:text-red-400", label: "Not logged" }
+                  : d.status === "future"
+                    ? { box: "border-border/60", text: "", label: "" }
+                    : d.status === "today" && d.hours === 0
+                      ? { box: "border-lime-500 ring-2 ring-lime-600/30 ring-offset-2 ring-offset-card", text: "", label: "" }
+                      : null;
+            const hPct = placeholder ? 0 : Math.max(d.hours / maxH, 0.05);
+            const dayTitle = `${d.dow} ${d.d}: ${placeholder?.label || (d.hours > 0 ? fmtHrs(d.hours) + " logged" : "nothing logged yet")}`;
+            // Working days open that day on the timesheet; days off and days ahead stay inert.
+            const linkable = d.status !== "future" && d.status !== "weekend" && d.status !== "holiday";
+            const colClass = cn(
+              "flex-1 flex flex-col items-center gap-2 h-full rounded-xl",
+              linkable && "transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30",
+            );
+            const Col = linkable ? Link : "div";
             return (
-              <div key={d.dow} className="flex-1 flex flex-col items-center gap-2 h-full">
+              <Col key={d.dow} href={`/tasks?date=${d.dateStr}`} className={colClass} title={dayTitle} aria-label={linkable ? `${dayTitle}. Open this day` : undefined}>
                 <div className="flex-1 w-full flex items-end justify-center">
-                  {off ? (
-                    <div className="w-full h-full rounded-xl border-2 border-dashed border-border grid place-items-center">
-                      <span
-                        className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider"
-                        style={{ transform: "rotate(-90deg)", whiteSpace: "nowrap" }}
-                      >
-                        {d.status === "holiday" ? "Holiday" : "Off"}
-                      </span>
+                  {placeholder ? (
+                    <div className={cn("w-full h-full rounded-xl border-2 border-dashed grid place-items-center", placeholder.box)}>
+                      {placeholder.label && (
+                        <span
+                          className={cn("text-[9px] font-bold uppercase tracking-wider", placeholder.text)}
+                          style={{ transform: "rotate(-90deg)", whiteSpace: "nowrap" }}
+                        >
+                          {placeholder.label}
+                        </span>
+                      )}
                     </div>
                   ) : (
-                    <div
-                      className={cn(
-                        "w-full rounded-xl flex items-start justify-center pt-2",
-                        d.status === "complete" && "bg-lime-400",
-                        d.status === "today" && "bg-lime-400 ring-2 ring-lime-600 ring-offset-2 ring-offset-card",
-                        d.status === "partial" && "bg-amber-400",
-                        d.status === "future" && "bg-muted",
-                      )}
-                      style={{ height: `${hPct * 100}%` }}
-                    >
+                    <div className="w-full h-full flex flex-col items-center justify-end">
                       {d.hours > 0 && (
-                        <span className={cn(
-                          "text-[11px] font-bold tabular-nums",
-                          d.status === "partial" ? "text-amber-950" : "text-lime-950",
-                        )}>
+                        <span className="text-[11px] font-bold tabular-nums text-foreground mb-1">
                           {fmtHrs(d.hours)}
                         </span>
                       )}
+                      <div
+                        className={cn(
+                          "w-full rounded-xl",
+                          d.status === "complete" && "bg-lime-400",
+                          d.status === "today" && "bg-lime-400 ring-2 ring-lime-600 ring-offset-2 ring-offset-card",
+                          d.status === "partial" && "bg-amber-400",
+                        )}
+                        style={{ height: `${hPct * 100}%` }}
+                      />
                     </div>
                   )}
                 </div>
                 <span className={cn(
-                  "text-[11px]",
+                  "text-[11px] text-center leading-tight",
                   d.status === "today" ? "font-bold text-foreground" : "font-medium text-muted-foreground",
                 )}>
                   {d.dow}
+                  <span className="block tabular-nums opacity-70">{d.d}</span>
                 </span>
-              </div>
+              </Col>
             );
           })}
         </div>
@@ -359,8 +383,9 @@ function WeekCard({
         <div className="flex items-center gap-4 mt-5 pt-4 border-t border-border flex-wrap">
           <LegendItem className="bg-lime-400" label="Target met" />
           <LegendItem className="bg-amber-400" label="Under target" />
+          <LegendItem className="border-2 border-dashed border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/20" label="Not logged" />
           <LegendItem className="bg-lime-400 ring-2 ring-lime-600" label="Today" />
-          <LegendItem dashed label="Off / Holiday" />
+          <LegendItem dashed label="Sunday / Holiday" />
         </div>
       </CardContent>
     </Card>
@@ -435,8 +460,8 @@ function MyScheduleCard({
         />
       </div>
       <CardContent className="py-6">
-        <div className="flex items-baseline gap-2 mb-4">
-          <span className="text-[2rem] leading-none font-bold tracking-tight text-foreground tabular-nums">{fmtHrs(target)}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-4">
+          <span className="text-[2rem] leading-none font-bold tracking-tight text-foreground tabular-nums whitespace-nowrap">{fmtHrs(target)}</span>
           <span className="text-xs text-muted-foreground">
             daily · {fmtHrs(target / 2)} half{schedule ? ` · ${schedule.name}` : ""}
           </span>

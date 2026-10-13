@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Hash, Lock, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Hash, Lock, Loader2 } from "lucide-react";
 
 import { cn } from "@/src/lib/utils";
 import { AlertDestructive } from "@/src/components/alerts/alertDestructive";
@@ -108,25 +108,18 @@ export function LoginForm({ className }: { className?: string }) {
 
         {/* Password */}
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="password"
-              className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground"
-            >
-              Password
-            </label>
-            <a
-              href="#"
-              className="text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              Forgot?
-            </a>
-          </div>
+          <label
+            htmlFor="password"
+            className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground"
+          >
+            Password
+          </label>
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               id="password"
               type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
               disabled={isLoading}
               className={cn(
                 "h-12 w-full rounded-xl border-0 bg-muted pl-10 pr-14 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0 disabled:opacity-50",
@@ -139,6 +132,7 @@ export function LoginForm({ className }: { className?: string }) {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
+              aria-pressed={showPassword}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground hover:text-foreground"
             >
               {showPassword ? "Hide" : "Show"}
@@ -159,15 +153,13 @@ export function LoginForm({ className }: { className?: string }) {
         >
           <div
             className={cn(
-              "flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all",
+              "flex size-4 shrink-0 items-center justify-center rounded-[5px] border-2 transition-all",
               rememberMe
                 ? "border-brand bg-brand"
                 : "border-border bg-background",
             )}
           >
-            {rememberMe && (
-              <div className="size-1.5 rounded-full bg-foreground" />
-            )}
+            {rememberMe && <Check className="size-3 text-foreground" strokeWidth={3} />}
           </div>
           <span className="text-sm text-muted-foreground">
             Keep me signed in for 30 days
@@ -188,6 +180,10 @@ export function LoginForm({ className }: { className?: string }) {
           <ArrowRight className="size-4" />
         )}
       </button>
+
+      <p className="text-center text-xs text-muted-foreground">
+        Forgot your password? Contact your admin.
+      </p>
     </form>
   );
 }

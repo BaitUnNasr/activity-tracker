@@ -32,7 +32,8 @@ function daysUntil(dateStr: string, today: string) {
 }
 
 const ALL_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const WORKING_DAYS = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+// Mon–Sat are working days; only Sunday is off (same rule as the timesheet).
+const WORKING_DAYS = new Set(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
@@ -161,9 +162,9 @@ function UsersCard({
         />
       </div>
       <CardContent className="py-6">
-        <div className="flex items-stretch divide-x divide-border">
+        <div className="grid grid-cols-2 gap-y-6 sm:grid-cols-4 sm:divide-x divide-border">
           {stats.map((s) => (
-            <div key={s.label} className="flex-1 px-5 first:pl-0 last:pr-0 min-w-0">
+            <div key={s.label} className="sm:px-5 sm:first:pl-0 sm:last:pr-0 min-w-0">
               <div className="text-[2.5rem] leading-none font-bold tracking-tight text-foreground tabular-nums">
                 {s.value}
               </div>
@@ -174,6 +175,29 @@ function UsersCard({
               {s.sub && <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>}
             </div>
           ))}
+        </div>
+
+        {/* Today's logging coverage across active staff */}
+        <div className="mt-6 pt-5 border-t border-border">
+          <div className="flex items-baseline justify-between gap-3 mb-2.5">
+            <span className="text-sm font-semibold text-foreground">Logged today</span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              <b className="text-foreground font-bold">{loggedToday}</b> of {active} active
+            </span>
+          </div>
+          <div
+            className="h-2.5 rounded-full bg-muted ring-1 ring-border overflow-hidden"
+            role="progressbar"
+            aria-label="Active staff who have logged today"
+            aria-valuenow={loggedToday}
+            aria-valuemin={0}
+            aria-valuemax={active}
+          >
+            <div
+              className="h-full rounded-full bg-lime-400"
+              style={{ width: `${active > 0 ? (loggedToday / active) * 100 : 0}%` }}
+            />
+          </div>
         </div>
       </CardContent>
     </Card>

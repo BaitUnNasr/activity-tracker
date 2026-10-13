@@ -294,6 +294,9 @@ export function CalendarCard({
                 key={i}
                 onClick={() => { clearWeekAnchor(); onSelectDate(dateStr); }}
                 title={holidayName}
+                aria-pressed={isSelected}
+                aria-current={isToday ? "date" : undefined}
+                aria-label={`${dn} ${MONTHS[viewMonth]}, ${holidayName ?? meta.label}`}
                 className={cn(
                   "relative h-[60px] sm:h-[72px] w-full rounded-xl border-[1.5px] p-1.5 sm:p-2 text-left flex-col justify-between transition-all overflow-hidden hover:brightness-[0.97]",
                   isRowHidden(i) ? "hidden lg:flex" : "flex",
