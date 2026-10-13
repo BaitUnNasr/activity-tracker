@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ClipboardList,
   CalendarDays,
+  FileSpreadsheet,
   LayoutDashboard,
   ListTodo,
   LogOut,
@@ -49,6 +50,7 @@ const navLinks = [
   { label: "Holidays", href: "/holidays", icon: CalendarDays },
   { label: "Schedule", href: "/schedule", icon: CalendarClock },
   { label: "Task Master", href: "/task-master", icon: ClipboardList },
+  { label: "Reports", href: "/reports", icon: FileSpreadsheet },
 ];
 
 function getInitials(name: string) {
@@ -75,7 +77,8 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
       !(link.href === "/holidays" && user?.designation !== "Admin") &&
       !(link.href === "/tasks" && user?.designation == "Admin") &&
       !(link.href === "/schedule" && user?.designation !== "Admin") &&
-      !(link.href === "/task-master" && user?.designation !== "Admin"),
+      !(link.href === "/task-master" && user?.designation !== "Admin") &&
+      !(link.href === "/reports" && user?.designation !== "Admin"),
   );
 
   function handleAvatarClick() {

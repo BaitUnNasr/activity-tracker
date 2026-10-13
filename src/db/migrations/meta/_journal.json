@@ -29,6 +29,13 @@
       "when": 1789935730376,
       "tag": "0003_drop_task_id_from_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791901300058,
+      "tag": "0004_salary_master",
+      "breakpoints": true
     }
   ]
 }

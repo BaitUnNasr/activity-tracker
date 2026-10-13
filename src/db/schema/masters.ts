@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  numeric,
   pgTable,
   primaryKey,
   real,
@@ -121,6 +122,21 @@ export const scheduleMaster = pgTable("schedule_master", {
   fulltimeHours: real("fulltime_hours").notNull().default(8),
   traineeHours: real("trainee_hours").notNull().default(5),
 });
+
+// Gross monthly salary used to cost work allocation. Effective-dated: a row
+// applies from `month` (always the 1st) until the user's next row.
+export const salaryMaster = pgTable(
+  "salary_master",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    gross: numeric("gross", { precision: 12, scale: 2, mode: "number" }).notNull(),
+  },
+  (table) => [uniqueIndex("sm_user_month_uniq").on(table.userId, table.month)],
+);
 
 export const taskEntry = pgTable(
   "task_entry",
