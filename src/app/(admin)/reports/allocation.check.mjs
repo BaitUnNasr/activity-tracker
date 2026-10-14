@@ -21,9 +21,9 @@ const { total, worked, aggregate } = aggregateShares(dailyShares(entries).values
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 
 assert.equal(worked, 22);
-close(total.A, 16.3);
-close(aggregate.A, 0.74090909090909096);
-close(aggregate.B, 0.090909090909090925);
-close(aggregate.C, 0.16818181818181818);
-close(aggregate.D + aggregate.E, 0);
+close(total.Mobilisation, 16.3);
+close(aggregate.Mobilisation, 0.74090909090909096);
+close(aggregate.Loans, 0.090909090909090925);
+close(aggregate.General, 0.16818181818181818);
+assert.equal(aggregate["Investment Services"], undefined); // zero-hour task never appears
 console.log("allocation ok");

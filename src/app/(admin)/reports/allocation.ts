@@ -1,25 +1,13 @@
 // Work-allocation costing maths, mirroring the society's Excel sheets
-// (Reports/*.xlsx). No imports, so allocation.check.ts can run it under plain node.
+// (Reports/*.xlsx). No imports, so allocation.check.mjs can run it under plain node.
 
-export type Bucket = "A" | "B" | "C" | "D" | "E";
-export type Shares = Record<Bucket, number>;
+// A category is a Task Master task: costing is split per task. `key` is the task
+// name (what a logged entry stores); the letter shown in sheets comes from its position.
+export type Category = { key: string; label: string };
+export type Shares = Record<string, number>; // task name -> share; absent = 0
 
-// Costing categories A–E and the Task Master tasks that roll up into each.
-export const CATEGORIES: { key: Bucket; label: string; tasks: string[] }[] = [
-  { key: "A", label: "Mobilisation", tasks: ["Mobilisation"] },
-  { key: "B", label: "Loan Servicing", tasks: ["Loans"] },
-  { key: "C", label: "General", tasks: ["General"] },
-  { key: "D", label: "Investment", tasks: ["Investment Deposit", "Investment Services"] },
-  { key: "E", label: "Revival", tasks: ["Revival"] },
-];
-
-// ponytail: tasks not listed above are costed as General; add a costing column
-// to Task Master if admins need to remap tasks without a code change.
-const BUCKET_OF = new Map(CATEGORIES.flatMap((c) => c.tasks.map((t) => [t, c.key] as const)));
-export const bucketOf = (task: string): Bucket => BUCKET_OF.get(task) ?? "C";
-
-export const zeroShares = (): Shares => ({ A: 0, B: 0, C: 0, D: 0, E: 0 });
-export const sumShares = (s: Shares) => s.A + s.B + s.C + s.D + s.E;
+export const shareOf = (s: Shares, key: string) => s[key] ?? 0;
+export const sumShares = (s: Shares) => Object.values(s).reduce((t, v) => t + v, 0);
 
 // Each worked day is split across the categories so it sums to 1 (100%), like
 // one row of the daily sheet. Days with no logged hours are left out.
@@ -27,13 +15,13 @@ export function dailyShares(entries: { date: string; task: string; hours: number
   const days = new Map<string, Shares>();
   for (const e of entries) {
     if (!(e.hours > 0)) continue;
-    const day = days.get(e.date) ?? zeroShares();
-    day[bucketOf(e.task)] += e.hours;
+    const day = days.get(e.date) ?? {};
+    day[e.task] = (day[e.task] ?? 0) + e.hours;
     days.set(e.date, day);
   }
   for (const day of days.values()) {
-    const total = day.A + day.B + day.C + day.D + day.E;
-    for (const k of Object.keys(day) as Bucket[]) day[k] /= total;
+    const total = sumShares(day);
+    for (const k of Object.keys(day)) day[k] /= total;
   }
   return days;
 }
@@ -41,13 +29,13 @@ export function dailyShares(entries: { date: string; task: string; hours: number
 // "Grand Total" and "Aggregate Category %" rows: the sum of the daily splits,
 // divided by the number of days worked.
 export function aggregateShares(days: Iterable<Shares>) {
-  const total = zeroShares();
+  const total: Shares = {};
   let worked = 0;
   for (const d of days) {
     worked++;
-    for (const k of Object.keys(total) as Bucket[]) total[k] += d[k];
+    for (const k of Object.keys(d)) total[k] = (total[k] ?? 0) + d[k];
   }
-  const aggregate = zeroShares();
-  if (worked) for (const k of Object.keys(total) as Bucket[]) aggregate[k] = total[k] / worked;
+  const aggregate: Shares = {};
+  if (worked) for (const k of Object.keys(total)) aggregate[k] = total[k] / worked;
   return { total, worked, aggregate };
 }

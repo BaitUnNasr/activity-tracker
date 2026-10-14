@@ -10,10 +10,11 @@ import {
   salaryMaster,
   taskDayMeta,
   taskEntry,
+  taskMaster,
   user,
   userBranchLink,
 } from "@/src/db/schema";
-import { aggregateShares, dailyShares, type Shares } from "./allocation";
+import { aggregateShares, dailyShares, type Category, type Shares } from "./allocation";
 
 export type Period = { month: string; start: string; end: string; asOf: string };
 
@@ -51,6 +52,15 @@ const entriesFor = (userIds: string[], p: Period) =>
     .from(taskEntry)
     .where(and(inArray(taskEntry.userId, userIds), gte(taskEntry.date, p.start), lte(taskEntry.date, p.end)));
 
+// Every active Task Master task, in master order, then any other task name that
+// appears in the logged hours (renamed or deleted tasks keep their history).
+async function categoriesFor(entries: { task: string }[]): Promise<Category[]> {
+  const tasks = await db.select({ name: taskMaster.name }).from(taskMaster).where(eq(taskMaster.isActive, true)).orderBy(asc(taskMaster.id));
+  const names = new Set(tasks.map((t) => t.name));
+  for (const e of entries) names.add(e.task);
+  return [...names].map((name) => ({ key: name, label: name }));
+}
+
 export type BranchRow = {
   userId: string;
   name: string;
@@ -61,7 +71,7 @@ export type BranchRow = {
 };
 
 // Branch Work Allocation: one row per employee with their aggregate category %.
-export async function fetchBranchReport(branchId: number, p: Period): Promise<BranchRow[]> {
+export async function fetchBranchReport(branchId: number, p: Period): Promise<{ rows: BranchRow[]; categories: Category[] }> {
   const members = await db
     .select({ id: user.id, name: user.name, employeeCode: user.employeeCode, isActive: user.isActive })
     .from(userBranchLink)
@@ -73,13 +83,13 @@ export async function fetchBranchReport(branchId: number, p: Period): Promise<Br
         or(isNull(userBranchLink.endDate), gte(userBranchLink.endDate, p.asOf)),
       ),
     );
-  if (!members.length) return [];
+  if (!members.length) return { rows: [], categories: await categoriesFor([]) };
 
   const ids = members.map((m) => m.id);
   const [entries, salaries] = await Promise.all([entriesFor(ids, p), salariesFor(ids, p.start)]);
   const grossOf = new Map(salaries.map((s) => [s.userId, s.gross]));
 
-  return members
+  const rows = members
     .map((m) => {
       const { worked, aggregate } = aggregateShares(dailyShares(entries.filter((e) => e.userId === m.id)).values());
       return { userId: m.id, name: m.name, employeeCode: m.employeeCode, gross: grossOf.get(m.id) ?? null, worked, shares: aggregate, isActive: m.isActive };
@@ -87,6 +97,7 @@ export async function fetchBranchReport(branchId: number, p: Period): Promise<Br
     // Like the Excel: staff who logged work or are on the salary master.
     .filter((r) => r.worked > 0 || (r.isActive && r.gross !== null))
     .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode, undefined, { numeric: true }));
+  return { rows, categories: await categoriesFor(entries) };
 }
 
 export type DailyRow = { date: string; remark: string; shares: Shares | null };
@@ -134,5 +145,10 @@ export async function fetchDailyReport(userId: string, p: Period) {
     rows.push({ date, remark, shares: byDay.get(date) ?? null });
   }
 
-  return { employee: { ...emp, branch: branch?.name ?? null }, rows, ...aggregateShares(byDay.values()) };
+  return {
+    employee: { ...emp, branch: branch?.name ?? null },
+    rows,
+    categories: await categoriesFor(entries),
+    ...aggregateShares(byDay.values()),
+  };
 }

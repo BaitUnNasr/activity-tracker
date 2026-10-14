@@ -425,26 +425,19 @@ export function ReadOnlyTaskRow({ entry, percent }: { entry: LocalEntry; percent
 // Fixed-width so the percentages line up down the list.
 function SharePercent({ value }: { value: number }) {
   return (
-    <span className="w-10 text-right text-xs font-medium tabular-nums text-muted-foreground shrink-0">
+    <span className="w-12 text-right text-xs font-medium tabular-nums text-muted-foreground shrink-0">
       {value}%
     </span>
   );
 }
 
-// Whole-number shares that always total exactly 100 (largest remainder), so the
-// list never reads 33 + 33 + 33.
+// Each value's share of the total, to one decimal. Plain rounding, not forced to
+// sum to 100, so these match the Reports page exactly (17.8 + 75.6 + 6.7 may read
+// 100.1) instead of nudging one value to make the list tidy.
 export function sharePercents(values: number[]): number[] {
   const total = values.reduce((s, v) => s + v, 0);
   if (total === 0) return values.map(() => 0);
-  const exact = values.map((v) => (v * 100) / total);
-  const out = exact.map(Math.floor);
-  const left = 100 - out.reduce((s, v) => s + v, 0);
-  exact
-    .map((v, i) => [v - out[i], i] as const)
-    .sort((a, b) => b[0] - a[0])
-    .slice(0, left)
-    .forEach(([, i]) => out[i]++);
-  return out;
+  return values.map((v) => Math.round((v * 1000) / total) / 10);
 }
 
 // Read-only entries grouped by task, so a task logged several times reads as one

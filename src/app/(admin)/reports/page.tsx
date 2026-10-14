@@ -6,7 +6,8 @@ import { cn } from "@/src/lib/utils";
 import { getAdminUser } from "@/src/lib/access";
 import { Card } from "@/src/components/ui/card";
 import { HeaderGlow } from "@/src/components/page-ui";
-import { CATEGORIES, sumShares, type Shares } from "./allocation";
+import { shareOf, sumShares, type Category } from "./allocation";
+import { colName } from "@/src/lib/xlsx";
 import { fetchBranchReport, fetchBranches, fetchDailyReport, periodOf, type Period } from "./data";
 import { branchSheet, dailySheet } from "./excel";
 import { ExcelButton, ReportFilters, SalaryInput } from "./_components/report-controls";
@@ -92,12 +93,12 @@ function ReportCard({
   );
 }
 
-function CategoryHeader({ sub }: { sub: string[] }) {
+function CategoryHeader({ categories, sub }: { categories: Category[]; sub: string[] }) {
   return (
     <>
-      {CATEGORIES.map((c) => (
+      {categories.map((c, i) => (
         <th key={c.key} colSpan={sub.length} className={cn(th, "text-center border-l border-border")}>
-          {c.key} · {c.label}
+          {colName(i)} · {c.label}
         </th>
       ))}
     </>
@@ -107,14 +108,14 @@ function CategoryHeader({ sub }: { sub: string[] }) {
 // ─── Branch Work Allocation (= "work allocation consolidation.xlsx") ──────────
 
 async function BranchReport({ branch, period }: { branch: { id: number; name: string }; period: Period }) {
-  const rows = await fetchBranchReport(branch.id, period);
+  const { rows, categories } = await fetchBranchReport(branch.id, period);
 
   const salaryTotal = rows.reduce((s, r) => s + (r.gross ?? 0), 0);
-  const catTotal = (k: keyof Shares) => rows.reduce((s, r) => s + (r.gross ?? 0) * r.shares[k], 0);
+  const catTotal = (k: string) => rows.reduce((s, r) => s + (r.gross ?? 0) * shareOf(r.shares, k), 0);
   const grandTotal = rows.reduce((s, r) => s + (r.gross ?? 0) * sumShares(r.shares), 0);
   const ofSalary = (x: number) => (salaryTotal ? pct(x / salaryTotal) : "—");
 
-  const sheet = branchSheet(branch.name, period, rows);
+  const sheet = branchSheet(branch.name, period, rows, categories);
 
   return (
     <ReportCard
@@ -133,11 +134,11 @@ async function BranchReport({ branch, period }: { branch: { id: number; name: st
             <th rowSpan={2} className={cn(th, "text-left")}>Employee</th>
             <th rowSpan={2} className={cn(th, "text-right")}>Days</th>
             <th rowSpan={2} className={cn(th, "text-right")}>Gross Salary</th>
-            <CategoryHeader sub={["%", "Amt."]} />
+            <CategoryHeader categories={categories} sub={["%", "Amt."]} />
             <th colSpan={2} className={cn(th, "text-center border-l border-border")}>Total</th>
           </tr>
           <tr>
-            {[...CATEGORIES, null].map((c) => (
+            {[...categories, null].map((c) => (
               <SubHeads key={c?.key ?? "total"} />
             ))}
           </tr>
@@ -145,7 +146,7 @@ async function BranchReport({ branch, period }: { branch: { id: number; name: st
         <tbody className="divide-y divide-border">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={16} className="px-4 py-12 text-center text-muted-foreground">
+              <td colSpan={6 + 2 * categories.length} className="px-4 py-12 text-center text-muted-foreground">
                 No employees in this branch logged work or have a salary set for this month.
               </td>
             </tr>
@@ -166,8 +167,8 @@ async function BranchReport({ branch, period }: { branch: { id: number; name: st
                 <td className={cn(td, "text-right")}>
                   <SalaryInput userId={r.userId} month={period.month} gross={r.gross} />
                 </td>
-                {CATEGORIES.map((c) => (
-                  <PctAmt key={c.key} share={r.shares[c.key]} gross={r.gross} />
+                {categories.map((c) => (
+                  <PctAmt key={c.key} share={shareOf(r.shares, c.key)} gross={r.gross} />
                 ))}
                 <PctAmt share={sumShares(r.shares)} gross={r.gross} strong />
               </tr>
@@ -179,7 +180,7 @@ async function BranchReport({ branch, period }: { branch: { id: number; name: st
             <tr>
               <td className={td} colSpan={3}>Total</td>
               <td className={cn(td, "text-right")}>{amt(salaryTotal)}</td>
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <Pair key={c.key} left={ofSalary(catTotal(c.key))} right={amt(catTotal(c.key))} />
               ))}
               <Pair left={ofSalary(grandTotal)} right={amt(grandTotal)} />
@@ -227,10 +228,10 @@ async function DailyReport({ userId, period, branchId }: { userId: string; perio
   if (!report) {
     return <Card className="px-6 py-12 text-center text-sm text-muted-foreground">Employee not found.</Card>;
   }
-  const { employee, rows, total, worked, aggregate } = report;
+  const { employee, rows, categories, total, worked, aggregate } = report;
   const daysLabel = `${worked} day${worked === 1 ? "" : "s"}`;
 
-  const sheet = dailySheet(employee, period, rows, total, aggregate);
+  const sheet = dailySheet(employee, period, rows, categories, total, aggregate);
 
   const backHref = `/reports?month=${period.month}${branchId ? `&branch=${branchId}` : ""}`;
 
@@ -253,7 +254,7 @@ async function DailyReport({ userId, period, branchId }: { userId: string; perio
             <th className={cn(th, "text-left")}>Date</th>
             <th className={cn(th, "text-left")}>Weekday</th>
             <th className={cn(th, "text-left")}>Remarks</th>
-            <CategoryHeader sub={["%"]} />
+            <CategoryHeader categories={categories} sub={["%"]} />
             <th className={cn(th, "text-right border-l border-border")}>Total</th>
           </tr>
         </thead>
@@ -263,9 +264,9 @@ async function DailyReport({ userId, period, branchId }: { userId: string; perio
               <td className={td}>{fmtDate(r.date)}</td>
               <td className={td}>{weekday(r.date)}</td>
               <td className={cn(td, "text-xs")}>{r.remark}</td>
-              {CATEGORIES.map((c) => (
-                <td key={c.key} className={cn(td, "text-right border-l border-border", r.shares?.[c.key] === 0 && "text-muted-foreground/50")}>
-                  {r.shares ? pct(r.shares[c.key]) : ""}
+              {categories.map((c) => (
+                <td key={c.key} className={cn(td, "text-right border-l border-border", r.shares && shareOf(r.shares, c.key) === 0 && "text-muted-foreground/50")}>
+                  {r.shares ? pct(shareOf(r.shares, c.key)) : ""}
                 </td>
               ))}
               <td className={cn(td, "text-right border-l border-border font-semibold")}>{r.shares ? "100%" : ""}</td>
@@ -275,15 +276,15 @@ async function DailyReport({ userId, period, branchId }: { userId: string; perio
         <tfoot className="bg-muted font-semibold border-t border-border">
           <tr>
             <td className={td} colSpan={3}>Grand Total</td>
-            {CATEGORIES.map((c) => (
-              <td key={c.key} className={cn(td, "text-right border-l border-border")}>{pct(total[c.key])}</td>
+            {categories.map((c) => (
+              <td key={c.key} className={cn(td, "text-right border-l border-border")}>{pct(shareOf(total, c.key))}</td>
             ))}
             <td className={cn(td, "text-right border-l border-border")}>{pct(sumShares(total))}</td>
           </tr>
           <tr className="border-t border-border">
             <td className={td} colSpan={3}>Aggregate Category %</td>
-            {CATEGORIES.map((c) => (
-              <td key={c.key} className={cn(td, "text-right border-l border-border")}>{pct(aggregate[c.key])}</td>
+            {categories.map((c) => (
+              <td key={c.key} className={cn(td, "text-right border-l border-border")}>{pct(shareOf(aggregate, c.key))}</td>
             ))}
             <td className={cn(td, "text-right border-l border-border")}>{worked ? "100%" : "—"}</td>
           </tr>

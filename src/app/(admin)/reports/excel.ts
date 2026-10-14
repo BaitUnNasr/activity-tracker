@@ -3,7 +3,7 @@
 // "work allocation consolidation".
 
 import { colName, excelDate, type XlsxCell, type XlsxSheet, type XlsxStyle } from "@/src/lib/xlsx";
-import { CATEGORIES, sumShares, type Shares } from "./allocation";
+import { shareOf, sumShares, type Category, type Shares } from "./allocation";
 import type { BranchRow, DailyRow, Period } from "./data";
 
 const SOCIETY = "Bait-un-Nas'r Urban Co-operative Credit Society Ltd.";
@@ -23,13 +23,14 @@ const amount: XlsxStyle = { border: box, numFmt: ACCOUNTING, align: { v: "center
 const percent: XlsxStyle = { border: box, numFmt: "0%", align: { v: "center" } };
 const periodDate: XlsxStyle = { fill: GREEN, border: { b: "thin" }, numFmt: "d-mmm-yy", align: { h: "center" } };
 
-export function branchSheet(branch: string, period: Period, rows: BranchRow[]): XlsxSheet {
+export function branchSheet(branch: string, period: Period, rows: BranchRow[], categories: Category[]): XlsxSheet {
   const salaryTotal = rows.reduce((t, r) => t + (r.gross ?? 0), 0);
   const amountOf = (r: BranchRow, share: number) => (r.gross === null ? 0 : r.gross * share);
-  const catTotals = [...CATEGORIES.map((c) => rows.reduce((t, r) => t + amountOf(r, r.shares[c.key]), 0)),
+  const catTotals = [...categories.map((c) => rows.reduce((t, r) => t + amountOf(r, shareOf(r.shares, c.key)), 0)),
     rows.reduce((t, r) => t + amountOf(r, sumShares(r.shares)), 0)];
 
-  const headerCols = 15; // A–O
+  const totalCol = 3 + 2 * categories.length; // the Total %-age column; Amt. follows
+  const headerCols = totalCol + 2;
   const headRow = (cells: [number, string][]) => {
     const row: XlsxCell[] = Array.from({ length: headerCols }, () => s(null, head));
     for (const [i, v] of cells) row[i] = s(v, head);
@@ -44,14 +45,14 @@ export function branchSheet(branch: string, period: Period, rows: BranchRow[]): 
         s(`Branch: ${branch}`, { fill: "FFFF00" }), s(null, { fill: "FFFF00" }), s(null, { fill: "FFFF00" })],
       ["For the period     from", null, s(excelDate(period.start), periodDate), s(null, periodDate),
         s("to", { align: { h: "center" } }), s(excelDate(period.end), periodDate), s(null, periodDate)],
-      headRow([[0, "Sr. No."], [1, "Name of Employee"], [2, "Gross Monthly Salary"], [3, "Categories"], [13, "Total"]]),
-      headRow(CATEGORIES.map((c, i): [number, string] => [3 + 2 * i, `${c.key} = ${c.label}`])),
-      headRow([...CATEGORIES, null].flatMap((_, i): [number, string][] => [[3 + 2 * i, "%-age"], [4 + 2 * i, "Amt."]])),
+      headRow([[0, "Sr. No."], [1, "Name of Employee"], [2, "Gross Monthly Salary"], [3, "Categories"], [totalCol, "Total"]]),
+      headRow(categories.map((c, i): [number, string] => [3 + 2 * i, `${colName(i)} = ${c.label}`])),
+      headRow([...categories, null].flatMap((_, i): [number, string][] => [[3 + 2 * i, "%-age"], [4 + 2 * i, "Amt."]])),
       ...rows.map((r, i): XlsxCell[] => [
         s(i + 1, head),
         s(r.name, { fill: GREEN, border: box, align: { v: "center" } }),
         s(r.gross, input(ACCOUNTING)),
-        ...CATEGORIES.flatMap((c) => [s(r.shares[c.key], input("0%")), s(amountOf(r, r.shares[c.key]), amount)]),
+        ...categories.flatMap((c) => [s(shareOf(r.shares, c.key), input("0%")), s(amountOf(r, shareOf(r.shares, c.key)), amount)]),
         s(sumShares(r.shares), percent),
         s(amountOf(r, sumShares(r.shares)), amount),
       ]),
@@ -59,10 +60,10 @@ export function branchSheet(branch: string, period: Period, rows: BranchRow[]): 
         ...catTotals.flatMap((t) => [s(salaryTotal ? t / salaryTotal : null, percent), s(t, amount)])],
     ],
     merges: [
-      "C3:D3", "F3:G3", "A4:A6", "B4:B6", "C4:C6", "D4:M4", "N4:O5",
-      ...CATEGORIES.map((_, i) => `${colName(3 + 2 * i)}5:${colName(4 + 2 * i)}5`),
+      "C3:D3", "F3:G3", "A4:A6", "B4:B6", "C4:C6", `D4:${colName(totalCol - 1)}4`, `${colName(totalCol)}4:${colName(totalCol + 1)}5`,
+      ...categories.map((_, i) => `${colName(3 + 2 * i)}5:${colName(4 + 2 * i)}5`),
     ],
-    widths: [null, 20.71],
+    widths: [null, 20.71, null, ...categories.flatMap(() => [12.5, 12.5])], // wide enough for "F = Investment Services"
   };
 }
 
@@ -91,10 +92,12 @@ export function dailySheet(
   employee: { name: string; branch: string | null },
   period: Period,
   days: DailyRow[],
+  categories: Category[],
   total: Shares,
   aggregate: Shares,
 ): XlsxSheet {
-  const blank = Array(9).fill(null);
+  const lastCol = 3 + categories.length; // the Total column
+  const blank = Array(lastCol + 1).fill(null);
   const firstDay = 12; // data starts on row 12, as in the original
   const totalRow = firstDay + days.length;
 
@@ -116,9 +119,9 @@ export function dailySheet(
       blank,
       blank,
       [s("Date", header), s("Weekdays", header), s("Remarks", header), s("Categories (in Percentages)", header),
-        s(null, header), s(null, header), s(null, header), s(null, header), s("Total", header)],
-      [s(null, header), s(null, header), s(null, header), ...CATEGORIES.map((c) => s(c.key, subHeader)), s(null, header)],
-      [s(null, header), s(null, header), s(null, header), ...CATEGORIES.map((c) => s(c.label, subHeader)), s(null, header)],
+        ...Array(Math.max(0, categories.length - 1)).fill(s(null, header)), s("Total", header)],
+      [s(null, header), s(null, header), s(null, header), ...categories.map((_, i) => s(colName(i), subHeader)), s(null, header)],
+      [s(null, header), s(null, header), s(null, header), ...categories.map((c) => s(c.label, subHeader)), s(null, header)],
       ...days.map((d): XlsxCell[] => {
         const sunday = new Date(d.date + "T00:00:00").getDay() === 0;
         const shares = d.shares;
@@ -130,23 +133,23 @@ export function dailySheet(
             ...(sunday && { fill: "5B0F00", font: { color: WHITE } }),
           }),
           s(d.remark, { border: dotted, align: { h: "center", v: "center" } }),
-          ...CATEGORIES.map((c) => s(shares ? shares[c.key] : 0, dayPct)),
+          ...categories.map((c) => s(shares ? shareOf(shares, c.key) : 0, dayPct)),
           s(shares ? 1 : 0, dayPct),
         ];
       }),
       [s("Grand Total", { ...grandTotal, border: { l: "thin", b: "thin" }, align: { h: "center", v: "center" } }),
         s(null, { border: { b: "thin" } }), s(null, { border: { r: "thin", b: "thin" } }),
-        ...CATEGORIES.map((c) => s(total[c.key], grandTotal)), s(sumShares(total), grandTotal)],
+        ...categories.map((c) => s(shareOf(total, c.key), grandTotal)), s(sumShares(total), grandTotal)],
       blank,
       [s("Aggregate Category %", { font: { sz: 12, color: WHITE }, fill: "000000", border: { l: "thin" }, align: { h: "center", v: "center" } }),
         s(null, { fill: "000000" }), s(null, { fill: "000000", border: { r: "thin" } }),
-        ...CATEGORIES.map((c) => s(aggregate[c.key], aggregatePct)),
+        ...categories.map((c) => s(shareOf(aggregate, c.key), aggregatePct)),
         s(days.some((d) => d.shares) ? 1 : 0, aggregatePct)],
     ],
     merges: [
-      "B5:C5", "B6:C6", "A9:A11", "B9:B11", "C9:C11", "D9:H9", "I9:I11",
+      "B5:C5", "B6:C6", "A9:A11", "B9:B11", "C9:C11", `D9:${colName(lastCol - 1)}9`, `${colName(lastCol)}9:${colName(lastCol)}11`,
       `A${totalRow}:C${totalRow}`, `A${totalRow + 2}:C${totalRow + 2}`,
     ],
-    widths: [14.43, 14.43, 17.86, 12.86, 14.57, 12.29, 12.71, 10.86, 14.43],
+    widths: [14.43, 14.43, 17.86, ...categories.map(() => 21), 14.43],
   };
 }
