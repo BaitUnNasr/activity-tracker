@@ -423,7 +423,7 @@ export function ReadOnlyTaskRow({ entry, percent }: { entry: LocalEntry; percent
 }
 
 // Fixed-width so the percentages line up down the list.
-function SharePercent({ value }: { value: number }) {
+export function SharePercent({ value }: { value: number }) {
   return (
     <span className="w-12 text-right text-xs font-medium tabular-nums text-muted-foreground shrink-0">
       {value}%
@@ -440,10 +440,10 @@ export function sharePercents(values: number[]): number[] {
   return values.map((v) => Math.round((v * 1000) / total) / 10);
 }
 
-// Read-only entries grouped by task, so a task logged several times reads as one
-// block with its subtotal. Groups keep the order their task was first logged.
-// Each task's share of the day's logged time is shown as a bar and a percentage.
-export function ReadOnlyTaskGroups({ entries }: { entries: LocalEntry[] }) {
+// Entries grouped by task, in the order each task was first logged, with each
+// task's total minutes and its share of the day. Shared by the admin activity view
+// and the user's own timesheet so both show the same numbers.
+export function taskShares(entries: LocalEntry[]) {
   const groups = new Map<string, LocalEntry[]>();
   for (const e of entries) groups.set(e.task, [...(groups.get(e.task) ?? []), e]);
   const tasks = [...groups].map(([task, items]) => ({
@@ -451,33 +451,48 @@ export function ReadOnlyTaskGroups({ entries }: { entries: LocalEntry[] }) {
     items,
     minutes: items.reduce((s, e) => s + toMinutes(e.hours), 0),
   }));
-  const percents = sharePercents(tasks.map((t) => t.minutes));
+  return { tasks, percents: sharePercents(tasks.map((t) => t.minutes)) };
+}
+
+// Each task's share of the day's logged time as a stacked bar; hover or focus a
+// segment for the task, its percentage and its time.
+export function ShareBar({ tasks, percents }: { tasks: { task: string; minutes: number }[]; percents: number[] }) {
+  return (
+    <TooltipProvider>
+      <div role="group" aria-label="Share of logged time" className="flex h-2.5 gap-0.5 mb-2 rounded-full">
+        {tasks.map((t, i) => (
+          <Tooltip key={t.task}>
+            <TooltipTrigger asChild>
+              <span
+                tabIndex={0}
+                aria-label={`${t.task}: ${percents[i]}%, ${fmtHrs(toHours(t.minutes))}`}
+                className="h-full basis-0 min-w-[3px] first:rounded-l-full last:rounded-r-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ flexGrow: t.minutes, background: taskColor(t.task) }}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6}>
+              <span className="size-2 rounded-sm shrink-0" style={{ background: taskColor(t.task) }} />
+              <span className="font-semibold">{t.task}</span>
+              <span className="tabular-nums opacity-80">
+                {percents[i]}% · {fmtHrs(toHours(t.minutes))}
+              </span>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+// Read-only entries grouped by task, so a task logged several times reads as one
+// block with its subtotal. Each task's share of the day is shown as a bar and a
+// percentage.
+export function ReadOnlyTaskGroups({ entries }: { entries: LocalEntry[] }) {
+  const { tasks, percents } = taskShares(entries);
 
   return (
     <div className="flex flex-col gap-2">
-      <TooltipProvider>
-        <div role="group" aria-label="Share of logged time" className="flex h-2.5 gap-0.5 mb-2 rounded-full">
-          {tasks.map((t, i) => (
-            <Tooltip key={t.task}>
-              <TooltipTrigger asChild>
-                <span
-                  tabIndex={0}
-                  aria-label={`${t.task}: ${percents[i]}%, ${fmtHrs(toHours(t.minutes))}`}
-                  className="h-full basis-0 min-w-[3px] first:rounded-l-full last:rounded-r-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  style={{ flexGrow: t.minutes, background: taskColor(t.task) }}
-                />
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={6}>
-                <span className="size-2 rounded-sm shrink-0" style={{ background: taskColor(t.task) }} />
-                <span className="font-semibold">{t.task}</span>
-                <span className="tabular-nums opacity-80">
-                  {percents[i]}% · {fmtHrs(toHours(t.minutes))}
-                </span>
-              </TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
-      </TooltipProvider>
+      <ShareBar tasks={tasks} percents={percents} />
       {tasks.map(({ task, items, minutes }, i) => {
         if (items.length === 1) return <ReadOnlyTaskRow key={task} entry={items[0]} percent={percents[i]} />;
         const color = taskColor(task);
