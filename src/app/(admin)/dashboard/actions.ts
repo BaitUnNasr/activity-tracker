@@ -78,6 +78,7 @@ export type PersonalDashboardData = {
   today: string;
   dailyTarget: number;
   todayHalfDay: boolean;
+  todayExtraHours: number;
   todayOnLeave: boolean;
   todayLeaveType: LeaveType | null;
   currentSchedule: DashboardScheduleRow | null;
@@ -313,13 +314,14 @@ export async function fetchPersonalDashboardData(
         .orderBy(desc(taskEntry.date)),
 
       db
-        .select({ halfDay: taskDayMeta.halfDay, onLeave: taskDayMeta.onLeave, leaveType: taskDayMeta.leaveType })
+        .select({ halfDay: taskDayMeta.halfDay, extraHours: taskDayMeta.extraHours, onLeave: taskDayMeta.onLeave, leaveType: taskDayMeta.leaveType })
         .from(taskDayMeta)
         .where(and(eq(taskDayMeta.userId, sessionUser.id), eq(taskDayMeta.date, today)))
         .limit(1),
     ]);
 
   const todayHalfDay = todayMetaRaw[0]?.halfDay ?? false;
+  const todayExtraHours = todayMetaRaw[0]?.extraHours ?? 0;
   const todayOnLeave = todayMetaRaw[0]?.onLeave ?? false;
   const todayLeaveType = (todayMetaRaw[0]?.leaveType as LeaveType | null) ?? null;
 
@@ -421,6 +423,7 @@ export async function fetchPersonalDashboardData(
     today,
     dailyTarget,
     todayHalfDay,
+    todayExtraHours,
     todayOnLeave,
     todayLeaveType,
     currentSchedule,

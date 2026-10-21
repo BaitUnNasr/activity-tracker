@@ -103,6 +103,7 @@ export async function fetchTasksPageData(
       halfDay: m.halfDay,
       onLeave: m.onLeave,
       leaveType: (m.leaveType as LeaveType | null) ?? null,
+      extraHours: m.extraHours,
     })),
     backdateDates: backdateRaw.map((b) => b.date),
   };

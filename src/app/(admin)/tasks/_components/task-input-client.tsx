@@ -48,6 +48,8 @@ import {
   getDayStatus,
   ceilingMinutes,
   clampMinutes,
+  dayTarget,
+  MAX_EXTRA_MINUTES,
   LEAVE_TYPE_OPTIONS,
   MIN_MINUTES,
   MONTHS,
@@ -84,7 +86,7 @@ export function TaskInputClient({
 
   const [serverMap, setServerMap] = useState<Map<string, LocalDay>>(() => buildServerMap(initialData));
   const [localDay, setLocalDay] = useState<LocalDay>(
-    () => serverMap.get(startDate) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] },
+    () => serverMap.get(startDate) ?? { halfDay: false, onLeave: false, leaveType: null, extraHours: 0, entries: [] },
   );
   const [isDirty, setIsDirty] = useState(false);
   const [confirmHalf, setConfirmHalf] = useState(false);
@@ -124,7 +126,7 @@ export function TaskInputClient({
     return () => {
       const { isDirty: dirty, selected: sel, localDay: day } = stateRef.current;
       if (dirty) {
-        saveDay(sel, day.halfDay, day.onLeave, day.leaveType, day.entries);
+        saveDay(sel, day.halfDay, day.onLeave, day.leaveType, day.extraHours, day.entries);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,7 +141,7 @@ export function TaskInputClient({
       const date = selected;
       setIsDirty(false); // this batch is now being saved; new edits re-arm the timer
       setAutoSaveState("saving");
-      runSave(() => saveDay(date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries))
+      runSave(() => saveDay(date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.extraHours, snapshot.entries))
         .then((result) => {
           if (result.success) {
             setServerMap((prev) => new Map(prev).set(date, snapshot));
@@ -167,7 +169,7 @@ export function TaskInputClient({
       navigator.sendBeacon?.(
         "/api/tasks/save",
         new Blob(
-          [JSON.stringify({ date: sel, halfDay: day.halfDay, onLeave: day.onLeave, leaveType: day.leaveType, entries: day.entries })],
+          [JSON.stringify({ date: sel, halfDay: day.halfDay, onLeave: day.onLeave, leaveType: day.leaveType, extraHours: day.extraHours, entries: day.entries })],
           { type: "application/json" },
         ),
       );
@@ -198,7 +200,7 @@ export function TaskInputClient({
   const { dailyTarget } = initialData;
   registerTaskColors(initialData);
   const halfTarget = dailyTarget / 2;
-  const target = localDay.halfDay ? halfTarget : dailyTarget;
+  const target = dayTarget(dailyTarget, localDay);
   // Summed in whole minutes: adding 5-minute entries as float hours drifts, and
   // "target reached" must not hinge on 7.999999 vs 8.
   const targetMinutes = toMinutes(target);
@@ -248,7 +250,7 @@ export function TaskInputClient({
     if (isDirty) {
       const snapshot = { ...localDay };
       const fromDate = selected;
-      runSave(() => saveDay(fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.entries)).then((result) => {
+      runSave(() => saveDay(fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.extraHours, snapshot.entries)).then((result) => {
         if (result.success) {
           setServerMap((prev) => new Map(prev).set(fromDate, snapshot));
         } else {
@@ -257,7 +259,7 @@ export function TaskInputClient({
       });
     }
     setSelected(date);
-    setLocalDay(serverMap.get(date) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] });
+    setLocalDay(serverMap.get(date) ?? { halfDay: false, onLeave: false, leaveType: null, extraHours: 0, entries: [] });
     setIsDirty(false);
     setPickStep("none");
     setPickedTaskId(null);
@@ -270,11 +272,22 @@ export function TaskInputClient({
 
   const handleToggleHalf = () => {
     // Enabling half day: block if current total already exceeds the half-day target
-    if (!localDay.halfDay && total > halfTarget) {
+    if (!localDay.halfDay && total > halfTarget + localDay.extraHours) {
       setHalfDayBlocked(true);
     } else {
       setConfirmHalf(true);
     }
+  };
+
+  // Extra hours raise the day's target. Refuse a change that would leave the
+  // logged time above the new target.
+  const setExtraMinutes = (minutes: number) => {
+    const extra = toHours(minutes);
+    if (totalMinutes > toMinutes(dayTarget(dailyTarget, { halfDay: localDay.halfDay, extraHours: extra }))) {
+      toast.error("Remove some activity time first — logged hours exceed the new target.");
+      return;
+    }
+    modify((c) => ({ ...c, extraHours: extra }));
   };
   const confirmToggleHalf = () => {
     modify((c) => ({ ...c, halfDay: !c.halfDay, onLeave: false, leaveType: null }));
@@ -296,6 +309,7 @@ export function TaskInputClient({
         ...c,
         onLeave: nextOnLeave,
         halfDay: false,
+        extraHours: nextOnLeave ? 0 : c.extraHours,
         leaveType: nextOnLeave ? leaveType : null,
       };
     });
@@ -307,13 +321,13 @@ export function TaskInputClient({
     setServerMap((prev) => {
       const next = new Map(prev);
       for (const d of dates) {
-        const ex = next.get(d) ?? { halfDay: false, onLeave: false, leaveType: null, entries: [] };
-        next.set(d, { ...ex, halfDay: false, onLeave: true, leaveType: "earned" as LeaveType });
+        const ex = next.get(d) ?? { halfDay: false, onLeave: false, leaveType: null, extraHours: 0, entries: [] };
+        next.set(d, { ...ex, halfDay: false, onLeave: true, leaveType: "earned" as LeaveType, extraHours: 0 });
       }
       return next;
     });
     if (dates.includes(selected)) {
-      setLocalDay((p) => ({ ...p, halfDay: false, onLeave: true, leaveType: "earned" }));
+      setLocalDay((p) => ({ ...p, halfDay: false, onLeave: true, leaveType: "earned", extraHours: 0 }));
       setIsDirty(false);
     }
   };
@@ -655,6 +669,44 @@ export function TaskInputClient({
                     </label>
                   )}
 
+                  {/* Extra hours — works on full and half days, hidden on leave */}
+                  {!localDay.onLeave && (
+                    <div className={cn(
+                      "px-3.5 py-3 rounded-xl border transition-colors",
+                      localDay.extraHours > 0
+                        ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
+                        : "bg-muted border-border",
+                    )}>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Toggle
+                          on={localDay.extraHours > 0}
+                          onChange={() => setExtraMinutes(localDay.extraHours > 0 ? 0 : 60)}
+                          activeClass="bg-emerald-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className={cn("text-sm font-semibold", localDay.extraHours > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>
+                            Add extra hours
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {localDay.extraHours > 0 ? `Target is ${fmtHrs(target)}` : "Worked beyond the day's target?"}
+                          </div>
+                        </div>
+                        {localDay.extraHours > 0 && (
+                          <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 shrink-0">+{fmtHrs(localDay.extraHours)}</span>
+                        )}
+                      </label>
+                      {localDay.extraHours > 0 && (
+                        <div className="mt-3">
+                          <DurationControl
+                            minutes={toMinutes(localDay.extraHours)}
+                            maxMinutes={MAX_EXTRA_MINUTES}
+                            onChange={setExtraMinutes}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Leave toggle — hidden when on half day */}
                   {!localDay.halfDay && (
                     <label className={cn(
@@ -694,6 +746,7 @@ export function TaskInputClient({
                 total={total}
                 target={target}
                 halfDay={localDay.halfDay}
+                extraHours={localDay.extraHours}
                 entries={localDay.entries}
               />
 
@@ -1277,9 +1330,9 @@ function HalfDayConfirmModal({
 // ─── Progress card ────────────────────────────────────────────────────────────
 
 function ProgressCard({
-  total, target, halfDay, entries,
+  total, target, halfDay, extraHours, entries,
 }: {
-  total: number; target: number; halfDay: boolean;
+  total: number; target: number; halfDay: boolean; extraHours: number;
   entries: LocalEntry[];
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((total / target) * 100));
@@ -1325,7 +1378,7 @@ function ProgressCard({
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Logged today</div>
             <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-3xl font-extrabold tabular-nums tracking-tight text-foreground">{fmtHrs(total)}</span>
-              <span className="text-sm text-muted-foreground">/ {fmtHrs(target)}{halfDay ? " (½)" : ""}</span>
+              <span className="text-sm text-muted-foreground">/ {fmtHrs(target)}{halfDay ? " (½)" : ""}{extraHours > 0 ? ` (+${fmtHrs(extraHours)} extra)` : ""}</span>
             </div>
             <div className={cn("mt-1.5 text-[12.5px] font-medium",
               over ? "text-blue-600 dark:text-blue-400"

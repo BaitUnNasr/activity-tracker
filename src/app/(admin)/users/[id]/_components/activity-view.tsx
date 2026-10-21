@@ -18,6 +18,7 @@ import {
   ReadOnlyTaskGroups,
   buildHolidayMap,
   buildServerMap,
+  dayTarget,
   fmtHrs,
   fmtLong,
   getDayStatus,
@@ -29,7 +30,7 @@ import {
 import { BackButton } from "./back-button";
 import { grantBackdate, revokeBackdate } from "../activity/actions";
 
-const EMPTY_DAY: LocalDay = { halfDay: false, onLeave: false, leaveType: null, entries: [] };
+const EMPTY_DAY: LocalDay = { halfDay: false, onLeave: false, leaveType: null, extraHours: 0, entries: [] };
 
 function fmt(dateStr: string) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
@@ -75,7 +76,7 @@ export function ActivityView({
   const isLocked = isHoliday || isWeekend || isFuture;
 
   const total = selectedDay.entries.reduce((s, e) => s + e.hours, 0);
-  const target_ = selectedDay.halfDay ? dailyTarget / 2 : dailyTarget;
+  const target_ = dayTarget(dailyTarget, selectedDay);
 
   // Backdate-access state for the currently selected day. Yesterday and today
   // are inside the user's own edit grace window, so no grant is needed there —
@@ -251,7 +252,7 @@ export function ActivityView({
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-bold text-foreground">Tasks</h3>
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    {fmtHrs(total)} / {fmtHrs(target_)}{selectedDay.halfDay ? " (½)" : ""}
+                    {fmtHrs(total)} / {fmtHrs(target_)}{selectedDay.halfDay ? " (½)" : ""}{selectedDay.extraHours > 0 ? ` (+${fmtHrs(selectedDay.extraHours)} extra)` : ""}
                   </span>
                 </div>
 

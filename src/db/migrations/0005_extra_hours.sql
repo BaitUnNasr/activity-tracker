@@ -1,0 +1,1 @@
+ALTER TABLE "task_day_meta" ADD COLUMN "extra_hours" real DEFAULT 0 NOT NULL;

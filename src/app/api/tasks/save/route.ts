@@ -16,6 +16,7 @@ export async function POST(req: Request) {
     halfDay?: boolean;
     onLeave?: boolean;
     leaveType?: LeaveType | null;
+    extraHours?: number;
     entries?: { task: string; category: string; answer: string; hours: number }[];
   };
   try {
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
     !!body.halfDay,
     !!body.onLeave,
     body.leaveType ?? null,
+    Number(body.extraHours) || 0,
     body.entries ?? [],
   );
   return NextResponse.json(result);

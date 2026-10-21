@@ -38,6 +38,7 @@ export type DayMetaRow = {
   halfDay: boolean;
   onLeave: boolean;
   leaveType: LeaveType | null;
+  extraHours: number;
 };
 
 export type HolidaySpan = {
@@ -67,6 +68,7 @@ export async function saveDay(
   halfDay: boolean,
   onLeave: boolean,
   leaveType: LeaveType | null,
+  extraHours: number,
   entries: { task: string; category: string; answer: string; hours: number }[],
 ): Promise<SaveDayResult> {
   const sessionUser = await getSessionUser(await headers());
@@ -77,8 +79,12 @@ export async function saveDay(
   if (onLeave && !LEAVE_TYPES.includes(leaveType as LeaveType)) {
     return { success: false, message: "Please choose a leave type" };
   }
-  // Leave type only applies when on leave.
+  if (!Number.isFinite(extraHours) || extraHours < 0 || extraHours > MAX_EXTRA_HOURS) {
+    return { success: false, message: "Invalid extra hours" };
+  }
+  // Leave type only applies when on leave; a leave day has no extra hours.
   const storedLeaveType = onLeave ? leaveType : null;
+  const extra = onLeave ? 0 : extraHours;
   try {
     // A leave on a past day can only be cleared if the user holds a backdate
     // grant for that exact day; other pre-today leaves are locked.
@@ -112,13 +118,13 @@ export async function saveDay(
       }
 
       // Upsert or remove day meta (halfDay / onLeave are mutually exclusive)
-      if (halfDay || onLeave) {
+      if (halfDay || onLeave || extra > 0) {
         await tx
           .insert(taskDayMeta)
-          .values({ userId, date, halfDay, onLeave, leaveType: storedLeaveType })
+          .values({ userId, date, halfDay, onLeave, leaveType: storedLeaveType, extraHours: extra })
           .onConflictDoUpdate({
             target: [taskDayMeta.userId, taskDayMeta.date],
-            set: { halfDay, onLeave, leaveType: storedLeaveType },
+            set: { halfDay, onLeave, leaveType: storedLeaveType, extraHours: extra },
           });
       } else {
         await tx
@@ -147,6 +153,7 @@ export type ApplyLeaveResult =
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LEAVE_DAYS = 90;
+const MAX_EXTRA_HOURS = 8;
 
 function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -242,10 +249,10 @@ export async function applyEarnedLeave(
       for (const date of dates) {
         await tx
           .insert(taskDayMeta)
-          .values({ userId, date, halfDay: false, onLeave: true, leaveType: "earned" })
+          .values({ userId, date, halfDay: false, onLeave: true, leaveType: "earned", extraHours: 0 })
           .onConflictDoUpdate({
             target: [taskDayMeta.userId, taskDayMeta.date],
-            set: { halfDay: false, onLeave: true, leaveType: "earned" },
+            set: { halfDay: false, onLeave: true, leaveType: "earned", extraHours: 0 },
           });
       }
     });

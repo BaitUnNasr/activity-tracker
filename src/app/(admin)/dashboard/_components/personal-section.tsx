@@ -75,7 +75,7 @@ export function PersonalSection({
   showGreeting?: boolean;
 }) {
   const {
-    today, dailyTarget, todayHalfDay, todayOnLeave, todayLeaveType, currentSchedule, upcomingHolidays,
+    today, dailyTarget, todayHalfDay, todayExtraHours, todayOnLeave, todayLeaveType, currentSchedule, upcomingHolidays,
     todayTasks, todayTotal, weekData, weekTotal,
     monthLogged, monthTarget, streak,
   } = data;
@@ -139,7 +139,7 @@ export function PersonalSection({
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6 items-start">
         <div className="flex flex-col gap-6">
-          <TodayProgressCard todayTasks={todayTasks} todayTotal={todayTotal} dailyTarget={dailyTarget} halfDay={todayHalfDay} onLeave={todayOnLeave} leaveType={todayLeaveType} today={today} />
+          <TodayProgressCard todayTasks={todayTasks} todayTotal={todayTotal} dailyTarget={dailyTarget} halfDay={todayHalfDay} extraHours={todayExtraHours} onLeave={todayOnLeave} leaveType={todayLeaveType} today={today} />
           <WeekCard weekData={weekData} weekTotal={weekTotal} dailyTarget={dailyTarget} />
         </div>
         <div className="flex flex-col gap-6">
@@ -155,14 +155,15 @@ export function PersonalSection({
 // ─── Today's Progress Card ────────────────────────────────────────────────────
 
 function TodayProgressCard({
-  todayTasks, todayTotal, dailyTarget, halfDay, onLeave, leaveType, today,
+  todayTasks, todayTotal, dailyTarget, halfDay, extraHours, onLeave, leaveType, today,
 }: Pick<PersonalDashboardData, "todayTasks" | "todayTotal" | "dailyTarget" | "today"> & {
   halfDay: boolean;
+  extraHours: number;
   onLeave: boolean;
   leaveType: PersonalDashboardData["todayLeaveType"];
 }) {
   // Half-day halves the target; on-leave days require no logging.
-  const target = halfDay ? dailyTarget / 2 : dailyTarget;
+  const target = (halfDay ? dailyTarget / 2 : dailyTarget) + extraHours;
   const pct = target > 0 ? Math.min(1, todayTotal / target) : 0;
   const remaining = Math.max(0, target - todayTotal);
   const done = remaining === 0;

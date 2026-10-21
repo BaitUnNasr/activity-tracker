@@ -26,6 +26,7 @@ export type LocalDay = {
   halfDay: boolean;
   onLeave: boolean;
   leaveType: LeaveType | null;
+  extraHours: number;
   entries: LocalEntry[];
 };
 
@@ -110,6 +111,13 @@ export const MIN_MINUTES = 5;
 export const toMinutes = (hours: number) => Math.round(hours * 60);
 export const toHours = (minutes: number) => minutes / 60;
 
+// Extra hours a day can add on top of its target (matches the server cap).
+export const MAX_EXTRA_MINUTES = 8 * 60;
+
+// A day's target: the schedule (halved on a half day) plus any extra hours.
+export const dayTarget = (dailyTarget: number, day?: Pick<LocalDay, "halfDay" | "extraHours">) =>
+  (day?.halfDay ? dailyTarget / 2 : dailyTarget) + (day?.extraHours ?? 0);
+
 // Highest value that is both within the cap and a whole 5-minute step. A cap
 // that isn't a multiple of the step rounds down, never up past the target.
 export function ceilingMinutes(maxMinutes: number): number {
@@ -186,6 +194,7 @@ export function buildServerMap(data: TasksPageData): Map<string, LocalDay> {
       halfDay: meta?.halfDay ?? false,
       onLeave: meta?.onLeave ?? false,
       leaveType: meta?.leaveType ?? null,
+      extraHours: meta?.extraHours ?? 0,
       entries: byDate.get(date) ?? [],
     });
   });
@@ -208,7 +217,7 @@ export function getDayStatus(
   if (dateStr > today) return "future";
   // Compared in whole minutes — float-hour sums drift (7.4999 vs 7.5).
   const total = dayData?.entries.reduce((s, e) => s + toMinutes(e.hours), 0) ?? 0;
-  const target = toMinutes(dayData?.halfDay ? dailyTarget / 2 : dailyTarget);
+  const target = toMinutes(dayTarget(dailyTarget, dayData));
   if (!dayData || total === 0) return dateStr === today ? "today-empty" : "missing";
   if (dayData.halfDay) return "half";
   if (total >= target) return "complete";
@@ -327,6 +336,7 @@ export function CalendarCard({
                   {status === "complete" && <Check className={cn("h-3 w-3 shrink-0", meta.cellText)} />}
                   {status === "missing" && <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />}
                   {dayData?.halfDay && <span className={cn("text-[11px] font-extrabold shrink-0", meta.cellText)}>½</span>}
+                  {!!dayData?.extraHours && status !== "leave" && <span className={cn("text-[11px] font-extrabold shrink-0", meta.cellText)}>+</span>}
                   {status === "leave" && <span className={cn("text-[11px] font-extrabold shrink-0", meta.cellText)}>L</span>}
                 </div>
 
@@ -343,7 +353,7 @@ export function CalendarCard({
                     <span className={cn("block text-[10.5px] sm:text-[11px] font-bold tabular-nums whitespace-nowrap", meta.cellText)}>
                       {/* "7h 30m" doesn't fit a ~48px phone cell; h:mm does. ½ is already in the top row. */}
                       <span className="sm:hidden">{fmtClock(entryTotal)}</span>
-                      <span className="hidden sm:inline">{fmtHrs(entryTotal)}{dayData?.halfDay ? " · ½" : ""}</span>
+                      <span className="hidden sm:inline">{fmtHrs(entryTotal)}{dayData?.halfDay ? " · ½" : ""}{dayData?.extraHours ? " · +" : ""}</span>
                     </span>
                   )}
                   {status === "missing" && (
@@ -378,6 +388,10 @@ export function CalendarCard({
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400">½</span>
             Half day
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="text-xs font-extrabold text-foreground">+</span>
+            Extra hours
           </div>
         </div>
       </CardContent>
