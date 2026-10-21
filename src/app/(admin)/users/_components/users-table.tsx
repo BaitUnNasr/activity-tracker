@@ -158,7 +158,7 @@ const columns: ColumnDef<UserRow>[] = [
 
 export function UsersTable({ rows, canAddUser, designations, branches }: Props) {
   const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([{ id: "status", value: "active" }]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
   const [showAddModal, setShowAddModal] = useState(false);

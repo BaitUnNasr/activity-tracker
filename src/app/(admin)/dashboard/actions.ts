@@ -1,21 +1,16 @@
 "use server";
 
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 import { db } from "@/src/db/client";
 import {
-  branchMaster,
-  designationMaster,
   holidayMaster,
   scheduleMaster,
   taskDayMeta,
   taskEntry,
-  user,
-  userBranchLink,
-  userDesignationLink,
 } from "@/src/db/schema";
 import type { SessionUser } from "@/src/lib/session";
-import { VISIBLE_DESIGNATIONS } from "@/src/lib/access";
+import { fetchVisibleUsers } from "@/src/lib/access";
 import type { LeaveType } from "@/src/app/(admin)/tasks/leave";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -131,51 +126,10 @@ function countWorkingDays(from: string, to: string): number {
 export async function fetchAdminDashboardData(
   sessionUser: SessionUser,
 ): Promise<AdminDashboardData> {
-  const designation = sessionUser.designation;
-  const isAdmin = designation === "Admin";
-  const visibleDesignations = VISIBLE_DESIGNATIONS[designation ?? ""] ?? [];
   const today = getToday();
 
-  const whereClause = isAdmin
-    ? undefined
-    : and(
-        inArray(designationMaster.name, visibleDesignations),
-        eq(branchMaster.name, sessionUser.branch ?? ""),
-      );
-
   const [users, holidays, schedules, todayEntries] = await Promise.all([
-    db
-      .select({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        employeeCode: user.employeeCode,
-        type: user.type,
-        isActive: user.isActive,
-        designation: designationMaster.name,
-        branch: branchMaster.name,
-      })
-      .from(user)
-      .leftJoin(
-        userDesignationLink,
-        and(
-          eq(userDesignationLink.userId, user.id),
-          isNull(userDesignationLink.endDate),
-        ),
-      )
-      .leftJoin(
-        designationMaster,
-        eq(userDesignationLink.designationId, designationMaster.id),
-      )
-      .leftJoin(
-        userBranchLink,
-        and(
-          eq(userBranchLink.userId, user.id),
-          isNull(userBranchLink.endDate),
-        ),
-      )
-      .leftJoin(branchMaster, eq(userBranchLink.branchId, branchMaster.id))
-      .where(whereClause),
+    fetchVisibleUsers(sessionUser),
 
     db
       .select({

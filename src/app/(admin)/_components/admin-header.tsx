@@ -8,6 +8,7 @@ import {
   ActivitySquare,
   CalendarClock,
   ClipboardList,
+  ClipboardX,
   CalendarDays,
   FileSpreadsheet,
   LayoutDashboard,
@@ -47,6 +48,7 @@ const navLinks = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Users", href: "/users", icon: Users },
   { label: "Tasks", href: "/tasks", icon: ListTodo },
+  { label: "Backlog", href: "/backlog", icon: ClipboardX },
   { label: "Holidays", href: "/holidays", icon: CalendarDays },
   { label: "Schedule", href: "/schedule", icon: CalendarClock },
   { label: "Task Master", href: "/task-master", icon: ClipboardList },
@@ -74,6 +76,7 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
   const visibleNavLinks = navLinks.filter(
     (link) =>
       !(link.href === "/users" && user?.designation === "General") &&
+      !(link.href === "/backlog" && (!user?.designation || user.designation === "General")) &&
       !(link.href === "/holidays" && user?.designation !== "Admin") &&
       !(link.href === "/tasks" && user?.designation == "Admin") &&
       !(link.href === "/schedule" && user?.designation !== "Admin") &&

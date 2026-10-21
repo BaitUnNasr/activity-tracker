@@ -49,13 +49,15 @@ function CountBadge({ count, tone }: { count: number; tone: "destructive" | "amb
   );
 }
 
-function PersonRow({ id, name, type, designation, branch, right }: {
+export function PersonRow({ id, name, type, designation, branch, right, stacked }: {
   id: string;
   name: string;
   type: string;
   designation: string | null;
   branch: string | null;
   right?: React.ReactNode;
+  // Put `right` on its own line under the details so the name gets the full width.
+  stacked?: boolean;
 }) {
   return (
     <Link
@@ -79,8 +81,9 @@ function PersonRow({ id, name, type, designation, branch, right }: {
           <Building2 className="h-3 w-3 shrink-0" />
           <span className="truncate">{branch}</span>
         </div>
+        {stacked && <div className="mt-2">{right}</div>}
       </div>
-      {right}
+      {!stacked && right}
       <span aria-hidden className="h-8 w-8 rounded-lg shrink-0 grid place-items-center border border-border bg-background text-muted-foreground">
         <ChevronRight className="h-4 w-4" />
       </span>
@@ -144,10 +147,10 @@ export function NotLoggedCard({ users, today }: { users: DashboardUserRow[]; tod
 
 // ─── Under Target Card ────────────────────────────────────────────────────────
 
-function TargetBar({ logged, target }: { logged: number; target: number }) {
+export function TargetBar({ logged, target, className }: { logged: number; target: number; className?: string }) {
   const pct = Math.min(1, logged / target);
   return (
-    <div className="flex items-center gap-2.5 justify-end">
+    <div className={cn("flex items-center gap-2.5 justify-end", className)}>
       <div className="w-16 sm:w-20">
         <div className="h-2 rounded-full bg-muted ring-1 ring-border overflow-hidden">
           <div className="h-full rounded-full bg-amber-500" style={{ width: `${pct * 100}%` }} />
