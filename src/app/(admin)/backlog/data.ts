@@ -3,8 +3,9 @@ import { and, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/src/db/client";
 import { holidayMaster, scheduleMaster, taskDayMeta, taskEntry } from "@/src/db/schema";
 import { fetchVisibleUsers } from "@/src/lib/access";
+import { activeSchedule, baseHours, targetFor, toDateStr } from "@/src/lib/day-target";
 import type { SessionUser } from "@/src/lib/session";
-import type { UnderTargetRow } from "../dashboard/actions";
+import type { UnderTargetRow } from "../dashboard/data";
 
 export type BacklogData = {
   today: string;
@@ -12,9 +13,6 @@ export type BacklogData = {
   holidays: Record<string, string>; // date → holiday name
   days: Record<string, UnderTargetRow[]>; // date → employees short of target
 };
-
-const pad = (n: number) => String(n).padStart(2, "0");
-const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 // Backlog = active employee whose logged time on a working day is below that
 // day's target (schedule hours, halved on a half day, plus extra hours).
@@ -76,17 +74,14 @@ export async function fetchBacklogMonth(
     cur.setDate(cur.getDate() + 1);
     if (isSunday || holidayByDate[date]) continue;
 
-    const sched = schedules.find(
-      (s) => s.startDate <= date && (s.endDate === null || s.endDate >= date),
-    );
+    const sched = activeSchedule(schedules, date);
     const rows: UnderTargetRow[] = [];
     for (const u of users) {
       if (toDateStr(u.createdAt) > date) continue;
       const meta = metaOf.get(`${u.id}|${date}`);
       if (meta?.onLeave) continue;
 
-      const base = sched ? (u.type === "F" ? sched.fulltimeHours : sched.traineeHours) : 7;
-      const target = (meta?.halfDay ? base / 2 : base) + (meta?.extraHours ?? 0);
+      const target = targetFor(baseHours(sched, u.type), meta);
       const hoursLogged = logged.get(`${u.id}|${date}`) ?? 0;
       if (Math.round(hoursLogged * 60) >= Math.round(target * 60)) continue;
 

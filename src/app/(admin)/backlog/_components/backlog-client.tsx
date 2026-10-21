@@ -23,7 +23,7 @@ import {
 import { HeaderGlow, IconChip } from "@/src/components/page-ui";
 import { CalendarWeekToggle } from "@/src/components/calendar-week-toggle";
 import { useCollapsibleCalendar } from "@/src/hooks/use-collapsible-calendar";
-import { PersonRow, TargetBar } from "../../dashboard/_components/user-list-card";
+import { PersonRow, TargetBar } from "../../dashboard/_components/person-row";
 import type { BacklogData } from "../data";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
