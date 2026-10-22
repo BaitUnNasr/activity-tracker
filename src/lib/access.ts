@@ -11,6 +11,11 @@ import {
 } from "@/src/db/schema";
 import { getSessionUser, type SessionUser } from "./session";
 
+// SuperAdmin has everything Admin has, so every "is Admin" check goes through this.
+export function isAdminRole(designation: string | null | undefined): boolean {
+  return designation === "Admin" || designation === "SuperAdmin";
+}
+
 // Editing master data — task master, holidays, schedule — is Admin-only.
 // Returns null for everyone else, so callers can deny instead of proceeding.
 // Every server action behind those pages must call this: route middleware only
@@ -18,12 +23,13 @@ import { getSessionUser, type SessionUser } from "./session";
 // regardless of which page rendered it.
 export async function getAdminUser(): Promise<SessionUser | null> {
   const user = await getSessionUser(await headers());
-  return user?.designation === "Admin" ? user : null;
+  return isAdminRole(user?.designation) ? user : null;
 }
 
 // Designation hierarchy: which designations each role may view/manage.
-// Empty array = Admin (sees everyone, across all branches).
+// Empty array = Admin/SuperAdmin (sees everyone, across all branches).
 export const VISIBLE_DESIGNATIONS: Record<string, string[]> = {
+  SuperAdmin: [],
   Admin: [],
   Chairman: ["Management", "Supervisor", "General"],
   Management: ["Supervisor", "General"],
@@ -40,7 +46,7 @@ type Scoped = { designation: string | null; branch: string | null };
 export function canViewUserActivity(viewer: Scoped, target: Scoped): boolean {
   const role = viewer.designation;
   if (!role || role === "General") return false;
-  if (role === "Admin") return true;
+  if (isAdminRole(role)) return true;
 
   const visible = VISIBLE_DESIGNATIONS[role] ?? [];
   if (!target.designation || !visible.includes(target.designation)) return false;
@@ -77,7 +83,7 @@ export function fetchVisibleUsers(viewer: Pick<SessionUser, "designation" | "bra
     )
     .leftJoin(branchMaster, eq(userBranchLink.branchId, branchMaster.id))
     .where(
-      viewer.designation === "Admin"
+      isAdminRole(viewer.designation)
         ? undefined
         : and(
             inArray(designationMaster.name, visible),

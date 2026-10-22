@@ -2,7 +2,7 @@ import { and, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/src/db/client";
 import { holidayMaster, scheduleMaster, taskDayMeta, taskEntry } from "@/src/db/schema";
-import { fetchVisibleUsers, VISIBLE_DESIGNATIONS } from "@/src/lib/access";
+import { fetchVisibleUsers, isAdminRole, VISIBLE_DESIGNATIONS } from "@/src/lib/access";
 import { activeSchedule, addDays, baseHours, targetFor, toDateStr } from "@/src/lib/day-target";
 import type { SessionUser } from "@/src/lib/session";
 import type { LeaveType } from "../tasks/leave";
@@ -62,7 +62,7 @@ function previousWorkingDay(today: string, isHoliday: (d: string) => boolean): s
 
 export async function fetchDashboardData(viewer: SessionUser): Promise<DashboardData> {
   const today = toDateStr(new Date());
-  const isAdmin = viewer.designation === "Admin";
+  const isAdmin = isAdminRole(viewer.designation);
   const hasTeam =
     isAdmin || (VISIBLE_DESIGNATIONS[viewer.designation ?? ""]?.length ?? 0) > 0;
 

@@ -73,15 +73,17 @@ export function AdminHeader({ user }: { user: SessionUser | null }) {
   const { resolvedTheme, setTheme } = useTheme();
 
   const initials = user?.name ? getInitials(user.name) : "?";
+  // access.ts is server-only, so the admin-role check is inlined here.
+  const isAdminRole = user?.designation === "Admin" || user?.designation === "SuperAdmin";
   const visibleNavLinks = navLinks.filter(
     (link) =>
       !(link.href === "/users" && user?.designation === "General") &&
       !(link.href === "/backlog" && (!user?.designation || user.designation === "General")) &&
-      !(link.href === "/holidays" && user?.designation !== "Admin") &&
-      !(link.href === "/tasks" && user?.designation == "Admin") &&
-      !(link.href === "/schedule" && user?.designation !== "Admin") &&
-      !(link.href === "/task-master" && user?.designation !== "Admin") &&
-      !(link.href === "/reports" && user?.designation !== "Admin"),
+      !(link.href === "/holidays" && !isAdminRole) &&
+      !(link.href === "/tasks" && isAdminRole) &&
+      !(link.href === "/schedule" && !isAdminRole) &&
+      !(link.href === "/task-master" && !isAdminRole) &&
+      !(link.href === "/reports" && !isAdminRole),
   );
 
   function handleAvatarClick() {

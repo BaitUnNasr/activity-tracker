@@ -19,7 +19,7 @@ import {
   branchMaster,
 } from "@/src/db/schema";
 import { getSessionUser } from "@/src/lib/session";
-import { VISIBLE_DESIGNATIONS } from "@/src/lib/access";
+import { isAdminRole, VISIBLE_DESIGNATIONS } from "@/src/lib/access";
 
 export type UserRow = {
   id: string;
@@ -47,7 +47,7 @@ export async function fetchUsersPageData(): Promise<UsersPageData> {
   }
 
   const designation = sessionUser.designation;
-  const isAdmin = designation === "Admin";
+  const isAdmin = isAdminRole(designation);
   const visibleDesignations = VISIBLE_DESIGNATIONS[designation] ?? [];
 
   if (!isAdmin && visibleDesignations.length === 0) {

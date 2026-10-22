@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 import { auth } from "@/src/lib/auth";
 import { db } from "@/src/db/client";
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   const [row] = await db
     .select({ email: user.email })
     .from(user)
-    .where(eq(user.employeeCode, employeeCode))
+    .where(or(eq(user.employeeCode, employeeCode), eq(user.email, employeeCode.toLowerCase())))
     .limit(1);
 
   // Same generic message whether the code is unknown or the password is wrong,

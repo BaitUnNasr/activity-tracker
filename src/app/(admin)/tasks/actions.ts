@@ -59,6 +59,18 @@ export type TasksPageData = {
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
 
+// Whose timesheet a write lands on. Only SuperAdmin may name another user, and
+// SuperAdmin skips the backdate/grace rules. The target comes from the client,
+// so it is honoured only after this check — never trusted on its own.
+async function resolveActor(targetUserId?: string) {
+  const s = await getSessionUser(await headers());
+  if (!s) return null;
+  const override = s.designation === "SuperAdmin";
+  // SuperAdmin has no timesheet of its own — it may only act on someone else.
+  if (override) return targetUserId && targetUserId !== s.id ? { userId: targetUserId, override } : null;
+  return !targetUserId || targetUserId === s.id ? { userId: s.id, override } : null;
+}
+
 export type SaveDayResult =
   | { success: true }
   | { success: false; message: string };
@@ -70,10 +82,11 @@ export async function saveDay(
   leaveType: LeaveType | null,
   extraHours: number,
   entries: { task: string; category: string; answer: string; hours: number }[],
+  targetUserId?: string,
 ): Promise<SaveDayResult> {
-  const sessionUser = await getSessionUser(await headers());
-  if (!sessionUser) return { success: false, message: "Not signed in" };
-  const userId = sessionUser.id;
+  const actor = await resolveActor(targetUserId);
+  if (!actor) return { success: false, message: "Not authorized" };
+  const { userId, override } = actor;
 
   if (!DATE_RE.test(date)) return { success: false, message: "Invalid date" };
   if (onLeave && !LEAVE_TYPES.includes(leaveType as LeaveType)) {
@@ -93,7 +106,7 @@ export async function saveDay(
         .select({ onLeave: taskDayMeta.onLeave })
         .from(taskDayMeta)
         .where(and(eq(taskDayMeta.userId, userId), eq(taskDayMeta.date, date)));
-      if (existing?.onLeave && !(await hasBackdateGrant(userId, date))) {
+      if (existing?.onLeave && !override && !(await hasBackdateGrant(userId, date))) {
         return { success: false, message: "Backdated leave cannot be removed" };
       }
     }
@@ -136,6 +149,7 @@ export async function saveDay(
     });
 
     revalidatePath("/tasks");
+    revalidatePath(`/users/${userId}/activity`);
     return { success: true };
   } catch (err) {
     return {
@@ -187,10 +201,11 @@ async function hasBackdateGrant(userId: string, date: string): Promise<boolean> 
 export async function applyEarnedLeave(
   fromDate: string,
   toDate: string,
+  targetUserId?: string,
 ): Promise<ApplyLeaveResult> {
-  const sessionUser = await getSessionUser(await headers());
-  if (!sessionUser) return { success: false, message: "Not signed in" };
-  const userId = sessionUser.id;
+  const actor = await resolveActor(targetUserId);
+  if (!actor) return { success: false, message: "Not authorized" };
+  const { userId, override } = actor;
 
   if (!DATE_RE.test(fromDate) || !DATE_RE.test(toDate)) {
     return { success: false, message: "Invalid date" };
@@ -227,7 +242,7 @@ export async function applyEarnedLeave(
   // a range must not silently spill onto ungranted past dates.
   const yday = yesterdayKey();
   const backdated = dates.filter((d) => d < yday);
-  if (backdated.length > 0) {
+  if (backdated.length > 0 && !override) {
     const grants = await db
       .select({ date: backdatePermission.date })
       .from(backdatePermission)
@@ -257,6 +272,7 @@ export async function applyEarnedLeave(
       }
     });
     revalidatePath("/tasks");
+    revalidatePath(`/users/${userId}/activity`);
     return { success: true, dates };
   } catch (err) {
     return { success: false, message: err instanceof Error ? err.message : "Failed to apply leave" };
@@ -265,14 +281,14 @@ export async function applyEarnedLeave(
 
 // Revoke a single leave day (removes the meta row; any preserved task entries
 // for that date are left untouched and become visible again).
-export async function revokeLeaveDate(date: string): Promise<SaveDayResult> {
-  const sessionUser = await getSessionUser(await headers());
-  if (!sessionUser) return { success: false, message: "Not signed in" };
-  const userId = sessionUser.id;
+export async function revokeLeaveDate(date: string, targetUserId?: string): Promise<SaveDayResult> {
+  const actor = await resolveActor(targetUserId);
+  if (!actor) return { success: false, message: "Not authorized" };
+  const { userId, override } = actor;
 
   if (!DATE_RE.test(date)) return { success: false, message: "Invalid date" };
   // Past-day leave can only be revoked with a backdate grant for that day.
-  if (date < todayKey() && !(await hasBackdateGrant(userId, date))) {
+  if (date < todayKey() && !override && !(await hasBackdateGrant(userId, date))) {
     return { success: false, message: "Backdated leave cannot be removed" };
   }
   try {
@@ -280,6 +296,7 @@ export async function revokeLeaveDate(date: string): Promise<SaveDayResult> {
       .delete(taskDayMeta)
       .where(and(eq(taskDayMeta.userId, userId), eq(taskDayMeta.date, date)));
     revalidatePath("/tasks");
+    revalidatePath(`/users/${userId}/activity`);
     return { success: true };
   } catch (err) {
     return { success: false, message: err instanceof Error ? err.message : "Failed to revoke leave" };

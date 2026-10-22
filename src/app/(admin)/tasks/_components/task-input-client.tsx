@@ -71,11 +71,15 @@ export function TaskInputClient({
   today,
   initialDate,
   initialData,
+  editingUser,
 }: {
   today: string;
   initialDate?: string;
   initialData: TasksPageData;
+  // Set when SuperAdmin edits another user's timesheet; the server re-checks it.
+  editingUser?: { id: string; name: string };
 }) {
+  const targetUserId = editingUser?.id;
   const todayDate = parseISO(today);
   // A linked day must round-trip through the parser (rejects 2026-13-45); otherwise start on today.
   const startDate = initialDate && toDateStr(parseISO(initialDate)) === initialDate ? initialDate : today;
@@ -126,7 +130,7 @@ export function TaskInputClient({
     return () => {
       const { isDirty: dirty, selected: sel, localDay: day } = stateRef.current;
       if (dirty) {
-        saveDay(sel, day.halfDay, day.onLeave, day.leaveType, day.extraHours, day.entries);
+        saveDay(sel, day.halfDay, day.onLeave, day.leaveType, day.extraHours, day.entries, targetUserId);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +145,7 @@ export function TaskInputClient({
       const date = selected;
       setIsDirty(false); // this batch is now being saved; new edits re-arm the timer
       setAutoSaveState("saving");
-      runSave(() => saveDay(date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.extraHours, snapshot.entries))
+      runSave(() => saveDay(date, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.extraHours, snapshot.entries, targetUserId))
         .then((result) => {
           if (result.success) {
             setServerMap((prev) => new Map(prev).set(date, snapshot));
@@ -169,7 +173,7 @@ export function TaskInputClient({
       navigator.sendBeacon?.(
         "/api/tasks/save",
         new Blob(
-          [JSON.stringify({ date: sel, halfDay: day.halfDay, onLeave: day.onLeave, leaveType: day.leaveType, extraHours: day.extraHours, entries: day.entries })],
+          [JSON.stringify({ date: sel, halfDay: day.halfDay, onLeave: day.onLeave, leaveType: day.leaveType, extraHours: day.extraHours, entries: day.entries, targetUserId })],
           { type: "application/json" },
         ),
       );
@@ -223,7 +227,8 @@ export function TaskInputClient({
   const isFuture = selected > today;
   const isPast = selected < today;
   // A superior may grant specific past dates for backdated logging.
-  const isBackdateAllowed = initialData.backdateDates.includes(selected);
+  // SuperAdmin editing another user needs no grant for any past day.
+  const isBackdateAllowed = !!targetUserId || initialData.backdateDates.includes(selected);
   const isGraceWindow = isToday || isYesterday;
   const isLocked = isHoliday || isWeekend || isFuture;
   const isEditable = (isGraceWindow || isBackdateAllowed) && !isLocked;
@@ -250,7 +255,7 @@ export function TaskInputClient({
     if (isDirty) {
       const snapshot = { ...localDay };
       const fromDate = selected;
-      runSave(() => saveDay(fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.extraHours, snapshot.entries)).then((result) => {
+      runSave(() => saveDay(fromDate, snapshot.halfDay, snapshot.onLeave, snapshot.leaveType, snapshot.extraHours, snapshot.entries, targetUserId)).then((result) => {
         if (result.success) {
           setServerMap((prev) => new Map(prev).set(fromDate, snapshot));
         } else {
@@ -347,7 +352,7 @@ export function TaskInputClient({
       // Upcoming (non-editable) leave day: revoke this date directly.
       const date = selected;
       setConfirmLeave(false);
-      runSave(() => revokeLeaveDate(date)).then((res) => {
+      runSave(() => revokeLeaveDate(date, targetUserId)).then((res) => {
         if (!res.success) {
           toast.error(res.message);
           return;
@@ -371,7 +376,7 @@ export function TaskInputClient({
 
     // Earned-leave range: one record per working day.
     setConfirmLeave(false);
-    runSave(() => applyEarnedLeave(result.from, result.to)).then((res) => {
+    runSave(() => applyEarnedLeave(result.from, result.to, targetUserId)).then((res) => {
       if (!res.success) {
         toast.error(res.message);
         return;
@@ -577,10 +582,12 @@ export function TaskInputClient({
         <HeaderGlow />
         <div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-            Task Input
+            {editingUser ? editingUser.name : "Task Input"}
           </h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Log hours against your tasks each day. Days you miss are flagged in red.
+            {editingUser
+              ? "Editing this user's timesheet as SuperAdmin. Past days are editable without a backdate grant."
+              : "Log hours against your tasks each day. Days you miss are flagged in red."}
           </p>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand/15 border border-brand/25 text-xs font-medium text-foreground">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Clock, PartyPopper, Plus } from "lucide-react";
 
+import { isAdminRole } from "@/src/lib/access";
 import { addDays } from "@/src/lib/day-target";
 import type { SessionUser } from "@/src/lib/session";
 import type { DashboardData } from "../data";
@@ -23,7 +24,7 @@ export function Dashboard({ data, sessionUser }: { data: DashboardData; sessionU
     ? "Yesterday"
     : new Date(`${yesterday}T00:00:00`).toLocaleDateString("en-US", { weekday: "long" });
   const yesterdayWord = isLiteralYesterday ? "yesterday" : yesterdayLabel;
-  const scope = sessionUser.designation === "Admin" ? "across all branches" : `for ${sessionUser.branch ?? "your branch"}`;
+  const scope = isAdminRole(sessionUser.designation) ? "across all branches" : `for ${sessionUser.branch ?? "your branch"}`;
 
   return (
     <div className="mt-4 space-y-5">

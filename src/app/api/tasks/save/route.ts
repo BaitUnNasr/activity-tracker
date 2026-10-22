@@ -5,8 +5,8 @@ import { getSessionUser } from "@/src/lib/session";
 import { saveDay } from "@/src/app/(admin)/tasks/actions";
 import type { LeaveType } from "@/src/app/(admin)/tasks/leave";
 
-// Beacon target for the on-hide/close flush. userId comes from the session — never
-// from the body — so a client can only ever write to its own timesheet.
+// Beacon target for the on-hide/close flush. userId comes from the session; a
+// body targetUserId is honoured by saveDay only for SuperAdmin.
 export async function POST(req: Request) {
   const user = await getSessionUser(await headers());
   if (!user) return NextResponse.json({ success: false }, { status: 401 });
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     leaveType?: LeaveType | null;
     extraHours?: number;
     entries?: { task: string; category: string; answer: string; hours: number }[];
+    targetUserId?: string;
   };
   try {
     body = await req.json();
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
     body.leaveType ?? null,
     Number(body.extraHours) || 0,
     body.entries ?? [],
+    body.targetUserId,
   );
   return NextResponse.json(result);
 }

@@ -17,6 +17,8 @@ export default async function TasksPage({
 }) {
   const sessionUser = await getSessionUser(await headers());
   if (!sessionUser) redirect("/login");
+  // SuperAdmin edits other users' timesheets; it has none of its own.
+  if (sessionUser.designation === "SuperAdmin") redirect("/dashboard");
 
   const today = getToday();
   // Dashboard links land on a specific day; anything malformed falls back to today.
