@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/src/db/client";
-import { user, userBranchLink, userDesignationLink } from "@/src/db/schema";
+import { session, user, userBranchLink, userDesignationLink } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
 import { canGrantDesignation, canManageUser, getAdminUser } from "@/src/lib/access";
 
@@ -22,10 +22,14 @@ export async function toggleUserStatus(userId: string, isActive: boolean): Promi
   const admin = await getAdminUser();
   if (!admin || !(await canManageUser(admin, userId))) return NOT_AUTHORIZED;
   try {
-    await db
-      .update(user)
-      .set({ isActive, updatedAt: new Date() })
-      .where(eq(user.id, userId));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(user)
+        .set({ isActive, updatedAt: new Date() })
+        .where(eq(user.id, userId));
+      // Sign them out everywhere; the session-create hook in auth.ts stops new logins.
+      if (!isActive) await tx.delete(session).where(eq(session.userId, userId));
+    });
     revalidatePath(`/users/${userId}`);
     return { success: true };
   } catch (err) {

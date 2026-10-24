@@ -109,11 +109,8 @@ export function TaskInputClient({
   const [pickedTaskId, setPickedTaskId] = useState<number | null>(null);
   const [pickedCategoryId, setPickedCategoryId] = useState<number | null>(null);
   // Several subcategories of the picked category can be ticked at once, each with
-  // its own time; "Other (custom)" is one more optional row.
+  // its own time.
   const [picks, setPicks] = useState<{ answer: string; minutes: number }[]>([]);
-  const [isCustomAnswer, setIsCustomAnswer] = useState(false);
-  const [customAnswer, setCustomAnswer] = useState("");
-  const [customMinutes, setCustomMinutes] = useState(60);
 
   // Ref always holds the latest dirty/saving state so effects read current values.
   const stateRef = useRef({ isDirty, selected, localDay, isSaving });
@@ -398,9 +395,6 @@ export function TaskInputClient({
     setPickedTaskId(null);
     setPickedCategoryId(null);
     setPicks([]);
-    setIsCustomAnswer(false);
-    setCustomAnswer("");
-    setCustomMinutes(60);
   };
 
   const handleConfirmAdd = () => {
@@ -432,13 +426,6 @@ export function TaskInputClient({
     );
   const setPickMinutes = (answer: string, minutes: number) =>
     setPicks((cur) => cur.map((p) => (p.answer === answer ? { ...p, minutes } : p)));
-  const toggleCustom = () => {
-    if (isCustomAnswer) setIsCustomAnswer(false);
-    else if (leftMinutes >= MIN_MINUTES) {
-      setIsCustomAnswer(true);
-      setCustomMinutes(clampMinutes(60, leftMinutes));
-    }
-  };
 
   const handleRemove = (task: string, category: string, answer: string) => {
     const date = selected;
@@ -539,18 +526,10 @@ export function TaskInputClient({
     : [];
   // Time budget: what is left today after the day's entries and everything ticked
   // so far. Each row may grow by that much, so ticked times can never overshoot.
-  const customText = customAnswer.trim();
-  const pickedTotal = picks.reduce((t, p) => t + p.minutes, 0) + (isCustomAnswer ? customMinutes : 0);
+  const pickedTotal = picks.reduce((t, p) => t + p.minutes, 0);
   const leftMinutes = targetMinutes - totalMinutes - pickedTotal;
-  const customDuplicate =
-    isCustomAnswer && customText.length > 0 && (usedAnswersForPicked.includes(customText) || picks.some((p) => p.answer === customText));
-  const selection = [...picks, ...(isCustomAnswer && customText ? [{ answer: customText, minutes: customMinutes }] : [])];
-  const canConfirmAdd =
-    pickedTaskId !== null &&
-    pickedCategoryId !== null &&
-    selection.length > 0 &&
-    !(isCustomAnswer && !customText) &&
-    !customDuplicate;
+  const selection = picks;
+  const canConfirmAdd = pickedTaskId !== null && pickedCategoryId !== null && selection.length > 0;
 
   const slideAnim =
     pickDir === "back"
@@ -862,9 +841,6 @@ export function TaskInputClient({
                         setPickedCategoryId(cid);
                         setPickStep("answer");
                         setPicks([]);
-                        setIsCustomAnswer(false);
-                        setCustomAnswer("");
-                        setCustomMinutes(60);
                       }}
                       onBack={() => { setPickDir("back"); setPickStep("task"); }}
                       onCancel={() => setPickStep("none")}
@@ -877,10 +853,6 @@ export function TaskInputClient({
                       task={pickedTask}
                       category={pickedCategory}
                       picks={picks}
-                      isCustom={isCustomAnswer}
-                      customAnswer={customAnswer}
-                      customMinutes={customMinutes}
-                      customDuplicate={customDuplicate}
                       count={selection.length}
                       pickedTotal={pickedTotal}
                       leftMinutes={leftMinutes}
@@ -888,9 +860,6 @@ export function TaskInputClient({
                       usedAnswers={usedAnswersForPicked}
                       onToggle={togglePick}
                       onPickMinutes={setPickMinutes}
-                      onToggleCustom={toggleCustom}
-                      onCustomChange={setCustomAnswer}
-                      onCustomMinutes={setCustomMinutes}
                       onConfirm={handleConfirmAdd}
                       onBack={() => { setPickDir("back"); setPickStep("category"); }}
                     />
@@ -1819,16 +1788,14 @@ function CategoryPicker({
 // own time, and add them all in one go.
 
 function AnswerPicker({
-  task, category, picks, isCustom, customAnswer, customMinutes, customDuplicate, count, pickedTotal, leftMinutes,
-  canConfirm, usedAnswers, onToggle, onPickMinutes, onToggleCustom, onCustomChange, onCustomMinutes, onConfirm, onBack, anim,
+  task, category, picks, count, pickedTotal, leftMinutes,
+  canConfirm, usedAnswers, onToggle, onPickMinutes, onConfirm, onBack, anim,
 }: {
   task: TaskForPicker; category: CategoryForPicker;
   picks: { answer: string; minutes: number }[];
-  isCustom: boolean; customAnswer: string; customMinutes: number; customDuplicate: boolean;
   count: number; pickedTotal: number; leftMinutes: number;
   canConfirm: boolean; usedAnswers: string[];
   onToggle: (answer: string) => void; onPickMinutes: (answer: string, minutes: number) => void;
-  onToggleCustom: () => void; onCustomChange: (v: string) => void; onCustomMinutes: (m: number) => void;
   onConfirm: () => void; onBack: () => void; anim?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -1910,44 +1877,6 @@ function AnswerPicker({
             </div>
           );
         })}
-
-        {/* Other (custom) */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={!isCustom && full}
-            aria-pressed={isCustom}
-            onClick={onToggleCustom}
-            className={cn(
-              "flex-1 min-w-0 text-left px-3 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-              isCustom
-                ? "bg-brand/10 border-brand/40 text-foreground"
-                : "bg-background border-border text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {isCustom && <Check className="inline h-3 w-3 mr-1.5 text-foreground" />}
-            Other (custom)…
-          </button>
-          {isCustom && (
-            <DurationChip label="custom activity" minutes={customMinutes} maxMinutes={leftMinutes + customMinutes} onChange={onCustomMinutes} />
-          )}
-        </div>
-
-        {isCustom && (
-          <>
-            <input
-              autoFocus
-              value={customAnswer}
-              onChange={(e) => onCustomChange(e.target.value)}
-              placeholder="Describe what you did…"
-              onKeyDown={(e) => { if (e.key === "Enter" && canConfirm) { e.preventDefault(); onConfirm(); } }}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40"
-            />
-            {customDuplicate && (
-              <p className="text-[11px] text-destructive">This activity is already added for this task.</p>
-            )}
-          </>
-        )}
 
         {/* Budget + confirm */}
         <div className="pt-3 border-t border-dashed border-border">
