@@ -26,6 +26,27 @@ export async function getAdminUser(): Promise<SessionUser | null> {
   return isAdminRole(user?.designation) ? user : null;
 }
 
+// Admin must not be able to touch SuperAdmin accounts (demote, deactivate, move)
+// or mint new ones — otherwise Admin is just SuperAdmin with extra steps.
+export async function canManageUser(actor: SessionUser, targetUserId: string): Promise<boolean> {
+  if (actor.designation === "SuperAdmin") return true;
+  const [target] = await db
+    .select({ name: designationMaster.name })
+    .from(userDesignationLink)
+    .innerJoin(designationMaster, eq(userDesignationLink.designationId, designationMaster.id))
+    .where(and(eq(userDesignationLink.userId, targetUserId), isNull(userDesignationLink.endDate)));
+  return target?.name !== "SuperAdmin";
+}
+
+export async function canGrantDesignation(actor: SessionUser, designationId: number): Promise<boolean> {
+  if (actor.designation === "SuperAdmin") return true;
+  const [d] = await db
+    .select({ name: designationMaster.name })
+    .from(designationMaster)
+    .where(eq(designationMaster.id, designationId));
+  return !!d && d.name !== "SuperAdmin";
+}
+
 // Designation hierarchy: which designations each role may view/manage.
 // Empty array = Admin/SuperAdmin (sees everyone, across all branches).
 export const VISIBLE_DESIGNATIONS: Record<string, string[]> = {

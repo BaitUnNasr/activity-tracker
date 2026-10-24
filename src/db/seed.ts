@@ -1,14 +1,16 @@
 import "dotenv/config";
+import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
+import { hashPassword } from "better-auth/crypto";
 import { db } from "./client";
 import {
+  account,
   branchMaster,
   designationMaster,
   user,
   userBranchLink,
   userDesignationLink,
 } from "./schema";
-import { auth } from "../lib/auth";
 
 const designationNames = [
   "SuperAdmin",
@@ -73,10 +75,16 @@ async function seed() {
     let [existing] = await db.select().from(user).where(eq(user.email, email));
 
     if (!existing) {
-      await auth.api.signUpEmail({
-        body: { name, email, password: "Demo@123", employeeCode, type } as never,
+      // Sign-up is disabled in auth config, so insert user + credential account directly.
+      const id = randomUUID();
+      await db.insert(user).values({ id, name, email, employeeCode, type, emailVerified: true });
+      await db.insert(account).values({
+        id: randomUUID(),
+        accountId: id,
+        providerId: "credential",
+        userId: id,
+        password: await hashPassword("Demo@123"),
       });
-      await db.update(user).set({ emailVerified: true }).where(eq(user.email, email));
       [existing] = await db.select().from(user).where(eq(user.email, email));
       console.log(`  created  ${name} <${email}>`);
     } else {

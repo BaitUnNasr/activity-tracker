@@ -4,10 +4,9 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 
-import { auth } from "@/src/lib/auth";
 import { db } from "@/src/db/client";
 import { getErrorMessage } from "@/src/lib/utils";
 import {
@@ -19,7 +18,7 @@ import {
   branchMaster,
 } from "@/src/db/schema";
 import { getSessionUser } from "@/src/lib/session";
-import { isAdminRole, VISIBLE_DESIGNATIONS } from "@/src/lib/access";
+import { canGrantDesignation, getAdminUser, isAdminRole, VISIBLE_DESIGNATIONS } from "@/src/lib/access";
 
 export type UserRow = {
   id: string;
@@ -54,8 +53,12 @@ export async function fetchUsersPageData(): Promise<UsersPageData> {
     redirect("/dashboard");
   }
 
+  const isSuperAdmin = designation === "SuperAdmin";
+
   const whereClause = isAdmin
-    ? undefined
+    ? isSuperAdmin
+      ? undefined
+      : or(isNull(designationMaster.name), ne(designationMaster.name, "SuperAdmin"))
     : and(
         inArray(designationMaster.name, visibleDesignations),
         eq(branchMaster.name, sessionUser.branch ?? ""),
@@ -89,7 +92,11 @@ export async function fetchUsersPageData(): Promise<UsersPageData> {
     db
       .select({ id: designationMaster.id, name: designationMaster.name })
       .from(designationMaster)
-      .where(eq(designationMaster.isActive, true)),
+      .where(
+        isSuperAdmin
+          ? eq(designationMaster.isActive, true)
+          : and(eq(designationMaster.isActive, true), ne(designationMaster.name, "SuperAdmin")),
+      ),
 
     db
       .select({ id: branchMaster.id, name: branchMaster.name })
@@ -128,10 +135,12 @@ function generateUserEmail(name: string, employeeCode: string): string {
 }
 
 export async function createUser(input: CreateUserInput): Promise<ActionResult> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return { success: false, message: "Unauthorized" };
-
   const { name, password, employeeCode, type, designationId, branchId } = input;
+
+  const admin = await getAdminUser();
+  if (!admin || !(await canGrantDesignation(admin, designationId))) {
+    return { success: false, message: "Unauthorized" };
+  }
 
   // Derived, not user-supplied.
   const email = generateUserEmail(name, employeeCode);

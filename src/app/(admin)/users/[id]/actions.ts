@@ -5,8 +5,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/src/db/client";
 import { user, userBranchLink, userDesignationLink } from "@/src/db/schema";
 import { getErrorMessage } from "@/src/lib/utils";
+import { canGrantDesignation, canManageUser, getAdminUser } from "@/src/lib/access";
 
 export type ActionResult = { success: true } | { success: false; message: string };
+
+const NOT_AUTHORIZED: ActionResult = { success: false, message: "Not authorized" };
 
 function addDays(dateStr: string, n: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -16,6 +19,8 @@ function addDays(dateStr: string, n: number): string {
 }
 
 export async function toggleUserStatus(userId: string, isActive: boolean): Promise<ActionResult> {
+  const admin = await getAdminUser();
+  if (!admin || !(await canManageUser(admin, userId))) return NOT_AUTHORIZED;
   try {
     await db
       .update(user)
@@ -29,6 +34,8 @@ export async function toggleUserStatus(userId: string, isActive: boolean): Promi
 }
 
 export async function transferBranch(userId: string, branchId: number, startDate: string): Promise<ActionResult> {
+  const admin = await getAdminUser();
+  if (!admin || !(await canManageUser(admin, userId))) return NOT_AUTHORIZED;
   try {
     await db.transaction(async (tx) => {
       const [current] = await tx
@@ -57,6 +64,14 @@ export async function transferBranch(userId: string, branchId: number, startDate
 }
 
 export async function updateDesignation(userId: string, designationId: number, startDate: string): Promise<ActionResult> {
+  const admin = await getAdminUser();
+  if (
+    !admin ||
+    !(await canManageUser(admin, userId)) ||
+    !(await canGrantDesignation(admin, designationId))
+  ) {
+    return NOT_AUTHORIZED;
+  }
   try {
     await db.transaction(async (tx) => {
       const [current] = await tx

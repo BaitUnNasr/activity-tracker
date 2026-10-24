@@ -10,17 +10,21 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    // Accounts are provisioned by admins via createUser, never self-registered.
+    disableSignUp: true,
   },
   user: {
     additionalFields: {
       employeeCode: {
         type: "string",
         required: true,
+        input: false,
         fieldName: "employeeCode",
       },
       type: {
         type: "string",
         required: true,
+        input: false,
         fieldName: "type",
       },
     },

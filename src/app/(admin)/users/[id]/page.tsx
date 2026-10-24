@@ -15,7 +15,7 @@ import {
   designationMaster,
 } from "@/src/db/schema";
 import { getSessionUser } from "@/src/lib/session";
-import { canViewUserActivity } from "@/src/lib/access";
+import { canViewUserActivity, isAdminRole } from "@/src/lib/access";
 import { type HistoryEntry, HistorySection } from "../../_components/user-card";
 import {
   StatusToggle,
@@ -140,7 +140,9 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                 <span className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-brand text-foreground">
                   # {userData.employeeCode}
                 </span>
-                <StatusToggle userId={userData.id} userName={userData.name} isActive={userData.isActive} />
+                {isAdminRole(sessionUser.designation) && (
+                  <StatusToggle userId={userData.id} userName={userData.name} isActive={userData.isActive} />
+                )}
               </div>
             </div>
           </div>
@@ -156,20 +158,24 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             branchHistory={branchHistory}
             designationHistory={designationHistory}
             branchAction={
-              <TransferBranchButton
-                userId={userData.id}
-                branches={allBranches}
-                currentBranchId={currentBranch?.branchId ?? null}
-                currentBranchName={currentBranch?.name ?? null}
-              />
+              isAdminRole(sessionUser.designation) && (
+                <TransferBranchButton
+                  userId={userData.id}
+                  branches={allBranches}
+                  currentBranchId={currentBranch?.branchId ?? null}
+                  currentBranchName={currentBranch?.name ?? null}
+                />
+              )
             }
             designationAction={
-              <UpdateDesignationButton
-                userId={userData.id}
-                designations={allDesignations}
-                currentDesignationId={currentDesignation?.designationId ?? null}
-                currentDesignationName={currentDesignation?.name ?? null}
-              />
+              isAdminRole(sessionUser.designation) && (
+                <UpdateDesignationButton
+                  userId={userData.id}
+                  designations={allDesignations}
+                  currentDesignationId={currentDesignation?.designationId ?? null}
+                  currentDesignationName={currentDesignation?.name ?? null}
+                />
+              )
             }
           />
         </Card>
