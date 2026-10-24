@@ -1,0 +1,2 @@
+ALTER TABLE "task_day_meta" DROP CONSTRAINT "leave_type_check";--> statement-breakpoint
+ALTER TABLE "task_day_meta" ADD CONSTRAINT "leave_type_check" CHECK ("task_day_meta"."leave_type" IS NULL OR "task_day_meta"."leave_type" IN ('casual', 'earned', 'unpaid', 'co'));

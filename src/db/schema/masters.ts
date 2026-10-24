@@ -162,7 +162,7 @@ export const taskDayMeta = pgTable(
     date: date("date").notNull(),
     halfDay: boolean("half_day").default(false).notNull(),
     onLeave: boolean("on_leave").default(false).notNull(),
-    // Set only when onLeave is true: casual | earned | unpaid.
+    // Set only when onLeave is true: casual | earned | unpaid | co.
     leaveType: text("leave_type"),
     // Hours worked beyond the day's target; raises that day's target by as much.
     extraHours: real("extra_hours").default(0).notNull(),
@@ -171,7 +171,7 @@ export const taskDayMeta = pgTable(
     primaryKey({ columns: [table.userId, table.date] }),
     check(
       "leave_type_check",
-      sql`${table.leaveType} IS NULL OR ${table.leaveType} IN ('casual', 'earned', 'unpaid')`,
+      sql`${table.leaveType} IS NULL OR ${table.leaveType} IN ('casual', 'earned', 'unpaid', 'co')`,
     ),
   ],
 );

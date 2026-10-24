@@ -5,7 +5,7 @@ import { cn, hashIndex } from "@/src/lib/utils";
 import type { DaySummary } from "../data";
 import { fmtHrs } from "./dashboard-ui";
 
-const LEAVE_LABEL = { casual: "Casual leave", earned: "Earned leave", unpaid: "Unpaid leave" } as const;
+const LEAVE_LABEL = { casual: "Casual leave", earned: "Earned leave", unpaid: "Unpaid leave", co: "Compensatory off" } as const;
 
 // Fixed vivid dots — never the --brand token, which flips to dark olive in dark mode.
 const DOTS = ["bg-lime-500", "bg-sky-500", "bg-amber-400", "bg-teal-500", "bg-orange-500", "bg-violet-500", "bg-pink-500"];

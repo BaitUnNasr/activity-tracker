@@ -36,12 +36,14 @@ export const LEAVE_TYPE_OPTIONS: { value: LeaveType; label: string; hint: string
   { value: "casual", label: "Casual leave", hint: "Short-notice personal time off" },
   { value: "earned", label: "Earned leave", hint: "Accrued paid leave" },
   { value: "unpaid", label: "Unpaid leave", hint: "Leave without pay" },
+  { value: "co", label: "Compensatory off", hint: "Time off in lieu of extra work" },
 ];
 
 export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
   casual: "Casual leave",
   earned: "Earned leave",
   unpaid: "Unpaid leave",
+  co: "Compensatory off",
 };
 
 export type DayStatus =
